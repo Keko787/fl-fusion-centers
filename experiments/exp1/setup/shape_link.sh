@@ -91,20 +91,32 @@ case "$CMD" in
         echo "[shape_link] ✓ shaping applied ($([ $JITTERY -eq 1 ] && echo JITTERY || echo PRIMARY))"
         ;;
 
-    remove)
+     remove)
         if [[ "$JITTERY" -eq 1 ]]; then
-            # Targeted removal: drop only the netem overlay; leave TBF intact.
+            # Targeted removal: drop netem, keep TBF — done as a full
+            # teardown + TBF reinstall rather than a child-qdisc del.
+            #
+            # Why: `tc qdisc del dev IFACE parent 1:1 handle 10:` removes
+            # only the netem and relies on the kernel to auto-install a
+            # default leaf at class 1:1. The window between those two
+            # operations is not netlink-atomic, and on a busy interface
+            # it can be long enough to drop SSH keepalives, taking the
+            # node off the network. Full teardown + reinstall avoids
+            # that race: the interface briefly falls back to its default
+            # qdisc (well-tested behavior) before the TBF is reapplied.
             if tc qdisc show dev "$IFACE" | grep -q 'qdisc netem'; then
-                tc qdisc del dev "$IFACE" parent 1:1 handle 10: 2>/dev/null || true
-                echo "[shape_link] ✓ removed netem overlay (TBF retained) on $IFACE"
+                tc qdisc del dev "$IFACE" root 2>/dev/null || true
+                tc qdisc add dev "$IFACE" root handle 1: tbf \
+                    rate 10mbit burst 32kbit latency 50ms
+                echo "[shape_link] ✓ removed netem overlay; TBF reapplied on $IFACE"
             else
-                echo "[shape_link] no netem overlay present on $IFACE — nothing to remove"
+                echo "[shape_link] no netem overlay present on $IFACE — nothing to do"
             fi
             echo
             echo "[shape_link] remaining qdiscs on $IFACE:"
             tc -s qdisc show dev "$IFACE"
         else
-            # Full teardown: drop the whole qdisc tree.
+            # Full teardown — drop the whole qdisc tree.
             tc qdisc del dev "$IFACE" root 2>/dev/null || true
             echo "[shape_link] ✓ all shaping removed from $IFACE"
             tc qdisc show dev "$IFACE"
