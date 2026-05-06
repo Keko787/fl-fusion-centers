@@ -1,0 +1,22 @@
+# HERMES experiments — sensitivity variant: P_idle_W × 0.5
+#
+# Derived from experiments/calibration.toml (verified). Only P_idle_W
+# is perturbed; all other constants and provenance unchanged.
+# This file exists ONLY to test how the energy figure scales when the
+# idle-power assumption is halved. See analysis appendix.
+
+[exp1.aerpaw_usrp]
+P_idle_W = 2.5
+epsilon_bit_J_per_bit = 7.0e-10
+B_nominal_bps = 10_000_000
+
+[exp3.mule_platform]
+P_idle_W = 2.5
+epsilon_bit_J_per_bit = 7.0e-10
+epsilon_prop_J_per_m = 10.0
+mule_cruise_speed_m_s = 5.0
+
+[provenance]
+last_verified = "2026-05-05"
+source = "Sensitivity variant of verified calibration: P_idle_W scaled to 0.5x baseline (5.0 -> 2.5 W). All other values unchanged. See experiments/calibration.toml for primary provenance."
+status = "verified"
