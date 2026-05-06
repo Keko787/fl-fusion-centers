@@ -172,6 +172,112 @@ def _per_trial_figure(fl_ts, ct_ts, out_path, cell_label):
     print(f"wrote {out_path}")
 
 
+def _walltime_per_trial_combined(
+    arms, means_p, sds_p, means_j, sds_j,
+    fl_ts, ct_ts, cell_label, out_path,
+):
+    """Combined wall-time bars + per-trial scatter into one 1x3 panel.
+
+    Panel A: 4-bar log-scale wall-time comparison (FL/Cent x primary/jittery)
+    Panel B: FL per-trial scatter (auto-scaled to FL cluster)
+    Panel C: Centralized per-trial scatter (auto-scaled to Centralized cluster)
+    """
+    fig, axes = plt.subplots(
+        1, 3, figsize=(17, 5.2),
+        gridspec_kw={"width_ratios": [1.35, 1.0, 1.0], "wspace": 0.28},
+    )
+
+    # -------- Panel A: 4-bar wall-time -----------------------------------
+    ax = axes[0]
+    x = np.arange(len(arms))
+    width = 0.38
+    ax.bar(x - width / 2, means_p, width, yerr=sds_p, capsize=4,
+            label="primary link (TBF only)", color="#4a8cd6")
+    ax.bar(x + width / 2, means_j, width, yerr=sds_j, capsize=4,
+            label="jittery link (TBF + netem)", color="#d65a3a")
+
+    for xi, mp, mj in zip(x, means_p, means_j):
+        infl = mj / mp if mp > 0 else float("nan")
+        ax.annotate(
+            f"{infl:.1f}x",
+            xy=(xi + width / 2, mj), xytext=(0, 8),
+            textcoords="offset points",
+            ha="center", va="bottom",
+            fontsize=12, fontweight="bold", color="#a04020",
+        )
+
+    ax.set_xticks(x)
+    ax.set_xticklabels(arms, fontsize=11)
+    ax.set_ylabel("T_proc (s, log scale)", fontsize=11)
+    ax.set_title(
+        f"Wall-time comparison\n"
+        f"jitter inflates Centralized {means_j[1]/means_p[1]:.1f}x  "
+        f"vs FL {means_j[0]/means_p[0]:.1f}x",
+        fontsize=11,
+    )
+    ax.legend(loc="upper left", fontsize=9)
+    ax.grid(axis="y", alpha=0.3)
+    ax.set_yscale("log")
+    ax.set_ylim(min(means_p) * 0.4, max(means_j) * 2.2)
+
+    # -------- Panel B: FL per-trial --------------------------------------
+    fl_mean, fl_sd = float(np.mean(fl_ts)), float(np.std(fl_ts, ddof=1))
+    ct_mean, ct_sd = float(np.mean(ct_ts)), float(np.std(ct_ts, ddof=1))
+
+    rng = np.random.default_rng(42)
+    fl_x = rng.normal(0.0, 0.04, size=len(fl_ts))
+    ct_x = rng.normal(0.0, 0.04, size=len(ct_ts))
+
+    ax_fl = axes[1]
+    ax_fl.scatter(fl_x, fl_ts, alpha=0.7, s=70,
+                    color="#2d7a2d", edgecolor="white", linewidth=0.5)
+    ax_fl.axhline(fl_mean, color="black", linestyle="-", linewidth=1.5,
+                    label=f"mean = {fl_mean:.2f} s")
+    ax_fl.axhspan(fl_mean - fl_sd, fl_mean + fl_sd,
+                    color="#2d7a2d", alpha=0.12,
+                    label=f"+/- 1 SD = {fl_sd:.2f} s")
+    fl_pad = max(fl_sd * 4.0, 0.5)
+    ax_fl.set_ylim(fl_mean - fl_pad, fl_mean + fl_pad)
+    ax_fl.set_xlim(-0.4, 0.4)
+    ax_fl.set_xticks([])
+    ax_fl.set_title(f"FL per-trial (jittery)\nn={len(fl_ts)}",
+                     fontsize=11, color="#2d7a2d", fontweight="bold")
+    ax_fl.set_ylabel("T_proc (s)", fontsize=11)
+    ax_fl.legend(loc="upper right", fontsize=9)
+    ax_fl.grid(axis="y", alpha=0.3)
+
+    # -------- Panel C: Centralized per-trial -----------------------------
+    ax_ct = axes[2]
+    ax_ct.scatter(ct_x, ct_ts, alpha=0.7, s=70,
+                    color="#c43a3a", edgecolor="white", linewidth=0.5)
+    ax_ct.axhline(ct_mean, color="black", linestyle="-", linewidth=1.5,
+                    label=f"mean = {ct_mean:.2f} s")
+    ax_ct.axhspan(ct_mean - ct_sd, ct_mean + ct_sd,
+                    color="#c43a3a", alpha=0.12,
+                    label=f"+/- 1 SD = {ct_sd:.2f} s")
+    ct_pad = max(ct_sd * 4.0, 5.0)
+    ax_ct.set_ylim(ct_mean - ct_pad, ct_mean + ct_pad)
+    ax_ct.set_xlim(-0.4, 0.4)
+    ax_ct.set_xticks([])
+    ax_ct.set_title(f"Centralized per-trial (jittery)\nn={len(ct_ts)}",
+                     fontsize=11, color="#c43a3a", fontweight="bold")
+    ax_ct.set_ylabel("T_proc (s)", fontsize=11)
+    ax_ct.legend(loc="upper right", fontsize=9)
+    ax_ct.grid(axis="y", alpha=0.3)
+
+    inflation = ct_mean / fl_mean if fl_mean > 0 else float("nan")
+    fig.suptitle(
+        f"Wall-time aggregate vs per-trial detail --- {cell_label}    "
+        f"(per-trial panels zoomed to each arm's cluster; "
+        f"Centralized mean is {inflation:.1f}x larger than FL mean)",
+        fontsize=11,
+    )
+    fig.tight_layout(rect=(0, 0, 1, 0.94))
+    fig.savefig(out_path, dpi=150, bbox_inches="tight")
+    plt.close(fig)
+    print(f"wrote {out_path}")
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     ap = argparse.ArgumentParser(prog="experiments.analysis.exp1_jittery_deep_dive")
     ap.add_argument("--csv-primary", required=True, type=Path)
@@ -241,6 +347,15 @@ def main(argv: Sequence[str] | None = None) -> int:
         sj["FL"][2], sj["Centralized"][2],
         out_path=args.out_dir / "jittery_per_trial.png",
         cell_label=cell_label,
+    )
+
+    _walltime_per_trial_combined(
+        arms,
+        [sp[a][0] for a in arms], [sp[a][1] for a in arms],
+        [sj[a][0] for a in arms], [sj[a][1] for a in arms],
+        sj["FL"][2], sj["Centralized"][2],
+        cell_label=cell_label,
+        out_path=args.out_dir / "jittery_walltime_per_trial.png",
     )
 
     print(f"\nNumerical summary (cell: {cell_label}):")
