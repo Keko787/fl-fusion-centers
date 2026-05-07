@@ -427,14 +427,17 @@ def write_figures(
                         Patch(facecolor=clean_color, alpha=0.65,
                               label="Clean"),
                         Patch(facecolor=jittery_color, alpha=0.65,
-                              label="Jittery (2% loss + 30% jit.)"),
+                              label="Jittery"),
                     ],
                     loc="upper center",
-                    bbox_to_anchor=(0.5, -0.15),
+                    bbox_to_anchor=(0.5, -0.13),
                     ncol=2,
-                    fontsize=9,
-                    title="Network regime", title_fontsize=9,
+                    fontsize=7.5,
                     frameon=True,
+                    borderpad=0.3,
+                    columnspacing=1.2,
+                    handlelength=1.2,
+                    handletextpad=0.4,
                 )
             else:
                 # Single-regime mode: original single-box behaviour.
