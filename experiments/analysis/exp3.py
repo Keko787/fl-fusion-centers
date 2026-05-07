@@ -751,21 +751,21 @@ def write_figures(
                        label=f"N = {N}")
                 for i, N in enumerate(Ns)
             ]
-            # Group both legends in the upper-right corner: Arm on
-            # top, Bucket size stacked just below it. With A1 omitted
-            # the mule-arm lines top out around y ≈ 2.2 (axes-fraction
-            # ≈ 0.85), leaving the upper 15% of the y-axis empty for
-            # the legend stack. Anchoring Bucket size at y=0.65 leaves
-            # ~35% of axes-height for the Arm legend above it.
+            # Group both legends side-by-side along the top edge:
+            # Bucket size pinned to the upper-right corner, Arm legend
+            # placed just to its left so the two read as a single
+            # horizontal legend cluster. With A1 omitted, the mule-arm
+            # lines top out around y ≈ 2.2 (axes-fraction ≈ 0.85),
+            # leaving the upper ~15% empty for the legend strip.
             arm_legend = ax.legend(
                 handles=arm_handles, title="Arm",
-                loc="upper right",
+                loc="upper right", bbox_to_anchor=(0.78, 1.0),
                 fontsize=9, title_fontsize=9,
             )
             ax.add_artist(arm_legend)
             ax.legend(
                 handles=n_handles, title="Bucket size",
-                loc="upper right", bbox_to_anchor=(1.0, 0.65),
+                loc="upper right",
                 fontsize=9, title_fontsize=9,
             )
             # Annotate the two distinct regimes the chart contains. A1
