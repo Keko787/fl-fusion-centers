@@ -63,6 +63,11 @@ class Exp3Row:
     beta: float
     deadline_het: bool
     rf_range_m: float
+    # Network-link jitter axis (False = clean / no link noise; True =
+    # 2% packet loss + 30% latency jitter, matching Exp.\ 1's --jittery
+    # cell). Defaults to False when loading older CSVs without the
+    # column so legacy results still parse.
+    jittery: bool
     update_yield: float
     coverage: float
     jains_fairness: float
@@ -130,6 +135,7 @@ def load_trials(csv_path: Path) -> List[Exp3Row]:
                     beta=float(raw["param_beta"]),
                     deadline_het=_opt_bool(raw["param_deadline_het"]),
                     rf_range_m=float(raw["param_rrf"]),
+                    jittery=_opt_bool(raw.get("param_jittery", "")),
                     update_yield=float(raw["update_yield"] or 0.0),
                     coverage=float(raw["coverage"] or 0.0),
                     jains_fairness=float(raw["jains_fairness"] or 0.0),
@@ -267,13 +273,42 @@ def write_figures(
     *,
     figures_dir: Path,
     placeholder_watermark: bool = False,
+    jittery_filter: str = "all",
 ) -> List[Path]:
     """Emit the six paper figures + paired-tests CSV.
+
+    Parameters
+    ----------
+    jittery_filter : ``"clean"`` | ``"jittery"`` | ``"all"`` (default ``"all"``)
+        Selects which subset of trials feeds the figures and stats.
+
+        * ``"clean"`` — only ``r.jittery is False`` rows; figures show
+          one box per arm (single condition).
+        * ``"jittery"`` — only ``r.jittery is True`` rows; same.
+        * ``"all"`` — uses every row but renders box plots as
+          *paired* boxes (clean + jittery side-by-side per arm) with
+          colour distinguishing the two conditions, so the reader can
+          see clusters within and across regimes. fig4 (β-sweep) is
+          generated twice (one variant per condition) since adding a
+          third visual axis on top of arm-colour and N-linestyle
+          would be unreadable.
 
     Returns the list of written paths. Each figure is wrapped in a
     try/except so a degenerate input (e.g. a CSV with only one arm)
     doesn't abort the whole batch.
     """
+    if jittery_filter not in ("clean", "jittery", "all"):
+        raise ValueError(
+            f"jittery_filter must be 'clean', 'jittery', or 'all'; "
+            f"got {jittery_filter!r}"
+        )
+
+    # Filter rows once up front when in single-regime mode so every
+    # downstream figure honours the filter consistently.
+    if jittery_filter == "clean":
+        rows = [r for r in rows if not r.jittery]
+    elif jittery_filter == "jittery":
+        rows = [r for r in rows if r.jittery]
     import matplotlib
 
     matplotlib.use("Agg")
@@ -312,29 +347,109 @@ def write_figures(
         ("fig0c", "jains_fairness", "Jain's fairness index"),
         ("fig0d", "coverage", "Fraction of scheduled devices serviced"),
     ]
+    # In "all" mode, render paired (clean+jittery) boxes when both
+    # regimes are present in the data. Otherwise fall back to single
+    # boxes per arm (single regime).
+    has_clean = any(r.is_ok and not r.jittery for r in rows)
+    has_jittery = any(r.is_ok and r.jittery for r in rows)
+    paired_mode = (
+        jittery_filter == "all" and has_clean and has_jittery
+    )
+    clean_color = "#5b9bd5"   # blue
+    jittery_color = "#ed7d31"  # orange
+
     for fig_id, metric, ylabel in metric_figs:
         try:
             if len(arms_order) < 2:
                 continue
-            data: List[List[float]] = []
-            labels: List[str] = []
-            for arm in arms_order:
-                vals = [
-                    getattr(r, metric) for r in rows
-                    if r.is_ok and r.arm == arm
-                    and getattr(r, metric) is not None
-                ]
-                if vals:
-                    data.append(vals)
-                    labels.append(arm)
-            if not data:
-                continue
-            fig, ax = plt.subplots(figsize=(6, 4))
-            ax.boxplot(
-                data, labels=labels, showmeans=True,
-                meanprops={"marker": "D", "markerfacecolor": "white",
-                           "markeredgecolor": "black", "markersize": 6},
-            )
+            fig, ax = plt.subplots(figsize=(7.5, 4.5) if paired_mode else (6, 4))
+
+            if paired_mode:
+                # Paired boxes: for each arm, plot two boxes side-by-
+                # side (clean then jittery) at offset positions, then
+                # set the x-tick at the midpoint with the arm label.
+                clean_data: List[List[float]] = []
+                jittery_data: List[List[float]] = []
+                kept_arms: List[str] = []
+                for arm in arms_order:
+                    cv = [getattr(r, metric) for r in rows
+                          if r.is_ok and r.arm == arm and not r.jittery
+                          and getattr(r, metric) is not None]
+                    jv = [getattr(r, metric) for r in rows
+                          if r.is_ok and r.arm == arm and r.jittery
+                          and getattr(r, metric) is not None]
+                    if cv or jv:
+                        clean_data.append(cv if cv else [float("nan")])
+                        jittery_data.append(jv if jv else [float("nan")])
+                        kept_arms.append(arm)
+                if not kept_arms:
+                    continue
+                spacing = 1.0
+                offset = 0.22
+                clean_pos = [i * spacing + 1 - offset
+                             for i in range(len(kept_arms))]
+                jit_pos = [i * spacing + 1 + offset
+                           for i in range(len(kept_arms))]
+                width = 0.35
+                bp_c = ax.boxplot(
+                    clean_data, positions=clean_pos, widths=width,
+                    patch_artist=True, showmeans=True,
+                    meanprops={"marker": "D", "markerfacecolor": "white",
+                               "markeredgecolor": "black", "markersize": 5},
+                    medianprops={"color": "#1f3a5f", "linewidth": 1.2},
+                )
+                for patch in bp_c["boxes"]:
+                    patch.set_facecolor(clean_color)
+                    patch.set_alpha(0.65)
+                bp_j = ax.boxplot(
+                    jittery_data, positions=jit_pos, widths=width,
+                    patch_artist=True, showmeans=True,
+                    meanprops={"marker": "D", "markerfacecolor": "white",
+                               "markeredgecolor": "black", "markersize": 5},
+                    medianprops={"color": "#7a3a05", "linewidth": 1.2},
+                )
+                for patch in bp_j["boxes"]:
+                    patch.set_facecolor(jittery_color)
+                    patch.set_alpha(0.65)
+
+                tick_positions = [i * spacing + 1
+                                  for i in range(len(kept_arms))]
+                ax.set_xticks(tick_positions)
+                ax.set_xticklabels(kept_arms)
+                labels = kept_arms
+                # Custom legend mapping color → regime.
+                from matplotlib.patches import Patch
+                ax.legend(
+                    handles=[
+                        Patch(facecolor=clean_color, alpha=0.65,
+                              label="Clean"),
+                        Patch(facecolor=jittery_color, alpha=0.65,
+                              label="Jittery (2% loss + 30% jit.)"),
+                    ],
+                    loc="upper right", fontsize=9,
+                    title="Network regime", title_fontsize=9,
+                )
+            else:
+                # Single-regime mode: original single-box behaviour.
+                data: List[List[float]] = []
+                labels: List[str] = []
+                for arm in arms_order:
+                    vals = [
+                        getattr(r, metric) for r in rows
+                        if r.is_ok and r.arm == arm
+                        and getattr(r, metric) is not None
+                    ]
+                    if vals:
+                        data.append(vals)
+                        labels.append(arm)
+                if not data:
+                    continue
+                ax.boxplot(
+                    data, labels=labels, showmeans=True,
+                    meanprops={"marker": "D", "markerfacecolor": "white",
+                               "markeredgecolor": "black", "markersize": 6},
+                )
+
             ax.set_ylabel(ylabel)
             ax.set_xlabel("Arm")
             ax.grid(True, axis="y", alpha=0.3)
@@ -345,12 +460,12 @@ def write_figures(
             # is one contact event — so the separator visually flags
             # that the boxplot mixes a control with an ablation set.
             if labels and labels[0] == "A1" and len(labels) > 1:
-                ax.axvline(x=1.5, color="#888888", linestyle="--",
+                # In paired mode, the separator sits between arm-1 and
+                # arm-2 in the new tick coordinate space; in single-
+                # box mode it sits at x=1.5.
+                sep_x = 1.5 if paired_mode else 1.5
+                ax.axvline(x=sep_x, color="#888888", linestyle="--",
                            linewidth=1.4, alpha=0.85, zorder=0)
-                # Extend the y-axis upward so the region labels sit in
-                # fresh whitespace instead of crashing into A1's high
-                # outliers. 18% headroom is enough that label boxes
-                # sit comfortably above the topmost data point.
                 ymin, ymax = ax.get_ylim()
                 yspan_orig = ymax - ymin
                 ax.set_ylim(ymin, ymax + 0.18 * yspan_orig)
@@ -379,24 +494,68 @@ def write_figures(
 
     # Figure 0e — mule-only propulsion energy. A1 has no mule, so this
     # is a separate three-arm comparison (A2/A3/A4) on the Eq. 5 cost
-    # ledger.
+    # ledger. Honours the same paired-mode rendering as fig0a-d.
     try:
         mule_arms = [a for a in ("A2", "A3", "A4") if a in arms]
         if len(mule_arms) >= 2:
-            fig, ax = plt.subplots(figsize=(6, 4))
-            data: List[List[float]] = []
-            labels: List[str] = []
-            for arm in mule_arms:
-                vals = [
-                    r.propulsion_energy_J for r in rows
-                    if r.is_ok and r.arm == arm
-                    and r.propulsion_energy_J is not None
-                ]
-                if vals:
-                    data.append(vals)
-                    labels.append(arm)
-            if data:
-                ax.boxplot(data, labels=labels, showmeans=True)
+            fig, ax = plt.subplots(figsize=(7.5, 4.5) if paired_mode else (6, 4))
+            if paired_mode:
+                clean_data = []
+                jittery_data = []
+                kept_arms = []
+                for arm in mule_arms:
+                    cv = [r.propulsion_energy_J for r in rows
+                          if r.is_ok and r.arm == arm and not r.jittery
+                          and r.propulsion_energy_J is not None]
+                    jv = [r.propulsion_energy_J for r in rows
+                          if r.is_ok and r.arm == arm and r.jittery
+                          and r.propulsion_energy_J is not None]
+                    if cv or jv:
+                        clean_data.append(cv if cv else [float("nan")])
+                        jittery_data.append(jv if jv else [float("nan")])
+                        kept_arms.append(arm)
+                offset = 0.22
+                width = 0.35
+                clean_pos = [i + 1 - offset for i in range(len(kept_arms))]
+                jit_pos = [i + 1 + offset for i in range(len(kept_arms))]
+                bp_c = ax.boxplot(
+                    clean_data, positions=clean_pos, widths=width,
+                    patch_artist=True, showmeans=True,
+                )
+                for patch in bp_c["boxes"]:
+                    patch.set_facecolor(clean_color); patch.set_alpha(0.65)
+                bp_j = ax.boxplot(
+                    jittery_data, positions=jit_pos, widths=width,
+                    patch_artist=True, showmeans=True,
+                )
+                for patch in bp_j["boxes"]:
+                    patch.set_facecolor(jittery_color); patch.set_alpha(0.65)
+                ax.set_xticks([i + 1 for i in range(len(kept_arms))])
+                ax.set_xticklabels(kept_arms)
+                from matplotlib.patches import Patch
+                ax.legend(
+                    handles=[
+                        Patch(facecolor=clean_color, alpha=0.65, label="Clean"),
+                        Patch(facecolor=jittery_color, alpha=0.65,
+                              label="Jittery (2% loss + 30% jit.)"),
+                    ],
+                    loc="upper right", fontsize=9,
+                    title="Network regime", title_fontsize=9,
+                )
+            else:
+                data: List[List[float]] = []
+                labels: List[str] = []
+                for arm in mule_arms:
+                    vals = [
+                        r.propulsion_energy_J for r in rows
+                        if r.is_ok and r.arm == arm
+                        and r.propulsion_energy_J is not None
+                    ]
+                    if vals:
+                        data.append(vals)
+                        labels.append(arm)
+                if data:
+                    ax.boxplot(data, labels=labels, showmeans=True)
             ax.set_ylabel("Propulsion energy per mission (J)")
             ax.set_xlabel("Arm")
             ax.grid(True, axis="y", alpha=0.3)
@@ -820,6 +979,20 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     parser.add_argument("--figures-dir", default=Path("figures/exp3"), type=Path)
     parser.add_argument("--calibration", default=None, type=Path)
     parser.add_argument("--no-figures", action="store_true")
+    parser.add_argument(
+        "--jittery-filter", choices=("clean", "jittery", "all"),
+        default="all",
+        help=(
+            "Filter trials by network-jitter condition. "
+            "'clean': only ``r.jittery=False`` rows (single box per "
+            "arm). "
+            "'jittery': only ``r.jittery=True`` rows (single box). "
+            "'all' (default): both regimes; box plots render paired "
+            "(clean + jittery) boxes per arm with colour distinguishing "
+            "the two so the reader can see clusters within and across "
+            "regimes."
+        ),
+    )
     args = parser.parse_args(argv)
 
     logging.basicConfig(
@@ -829,7 +1002,28 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
 
     cal = load_calibration(args.calibration)
     rows = load_trials(args.csv)
-    text = summarize(rows)
+
+    # Apply --jittery-filter to the rows that feed the text summary.
+    # In "all" mode the summary still sees both regimes pooled (the
+    # paired tests in that mode reflect "robustness across regimes");
+    # in "clean"/"jittery" the summary is regime-specific.
+    if args.jittery_filter == "clean":
+        summary_rows = [r for r in rows if not r.jittery]
+    elif args.jittery_filter == "jittery":
+        summary_rows = [r for r in rows if r.jittery]
+    else:
+        summary_rows = list(rows)
+
+    n_clean = sum(1 for r in rows if r.is_ok and not r.jittery)
+    n_jit = sum(1 for r in rows if r.is_ok and r.jittery)
+    log.info(
+        "loaded %d ok trials (%d clean, %d jittery); "
+        "filter=%s leaves %d trials in scope",
+        n_clean + n_jit, n_clean, n_jit, args.jittery_filter,
+        sum(1 for r in summary_rows if r.is_ok),
+    )
+
+    text = summarize(summary_rows)
     # Write via the raw stdout buffer so the Greek δ in the summary
     # survives Windows' default cp1252 console encoding.
     try:
@@ -842,8 +1036,12 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             rows,
             figures_dir=args.figures_dir,
             placeholder_watermark=not cal.is_paper_grade,
+            jittery_filter=args.jittery_filter,
         )
-        log.info("wrote %d figures/CSVs to %s", len(figs), args.figures_dir)
+        log.info(
+            "wrote %d figures/CSVs to %s (jittery-filter=%s)",
+            len(figs), args.figures_dir, args.jittery_filter,
+        )
     return 0
 
 
