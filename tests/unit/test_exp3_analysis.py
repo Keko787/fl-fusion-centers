@@ -164,3 +164,6 @@ def test_write_figures_smoke(tmp_path: Path):
     assert "exp3_paired_tests.csv" in written_names
     assert any("a4_vs_a3" in n for n in written_names)
     assert any("rho_contact" in n for n in written_names)
+    # All-arms headline panel + the mule-only energy sibling.
+    assert "exp3_fig0_all_arms.png" in written_names
+    assert "exp3_fig0b_propulsion_energy.png" in written_names
