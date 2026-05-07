@@ -301,39 +301,18 @@ def write_figures(
     # of improvement so the reader doesn't need to cross-reference the
     # paper text.
     arms_order = [a for a in ("A1", "A2", "A3", "A4") if a in arms]
-    # (fig_id, attribute, short title, y-axis label, formula/definition,
-    # direction marker for the title)
+    # (fig_id, attribute, y-axis label) — titles/captions intentionally
+    # omitted from the rendered figures; they belong in the LaTeX caption
+    # produced by ``write_latex_captions`` so the paper figure environment
+    # owns the prose layer.
     metric_figs = [
-        (
-            "fig0a", "update_yield",
-            "Update yield",
-            "Updates aggregated per round (mean)",
-            "Mean count of FL client updates aggregated per round",
-            "↑ higher is better",
-        ),
-        (
-            "fig0b", "round_close_rate_kminhalf",
-            "Round close rate",
-            "Fraction of rounds closed (k_min = N/2)",
-            r"Fraction of rounds with $\geq$ N/2 updates within deadline",
-            "↑ higher is better",
-        ),
-        (
-            "fig0c", "jains_fairness",
-            "Jain's fairness",
-            "Jain's fairness index (1.0 = equal service)",
-            r"$J = (\Sigma x_i)^2 / (N \cdot \Sigma x_i^2)$  on per-device service counts",
-            "↑ higher is better (range $[1/N, 1]$)",
-        ),
-        (
-            "fig0d", "coverage",
-            "Coverage",
-            "Fraction of scheduled devices serviced (≥ 1 visit)",
-            "Devices served at least once / total scheduled devices",
-            "↑ higher is better (range $[0, 1]$)",
-        ),
+        ("fig0a", "update_yield", "Updates aggregated per round (mean)"),
+        ("fig0b", "round_close_rate_kminhalf",
+         "Fraction of rounds closed (k_min = N/2)"),
+        ("fig0c", "jains_fairness", "Jain's fairness index"),
+        ("fig0d", "coverage", "Fraction of scheduled devices serviced"),
     ]
-    for fig_id, metric, short_title, ylabel, definition, direction in metric_figs:
+    for fig_id, metric, ylabel in metric_figs:
         try:
             if len(arms_order) < 2:
                 continue
@@ -350,7 +329,7 @@ def write_figures(
                     labels.append(arm)
             if not data:
                 continue
-            fig, ax = plt.subplots(figsize=(6.5, 4.5))
+            fig, ax = plt.subplots(figsize=(6, 4))
             ax.boxplot(
                 data, labels=labels, showmeans=True,
                 meanprops={"marker": "D", "markerfacecolor": "white",
@@ -358,17 +337,9 @@ def write_figures(
             )
             ax.set_ylabel(ylabel)
             ax.set_xlabel("Arm")
-            ax.set_title(f"{short_title}  ({direction})", fontsize=11)
             ax.grid(True, axis="y", alpha=0.3)
-            # Caption under the x-axis explaining what the metric means.
-            fig.text(
-                0.5, 0.02, definition,
-                ha="center", va="bottom", fontsize=9,
-                style="italic", color="#444444", wrap=True,
-            )
             _watermark(ax)
-            # Leave room at the bottom for the caption.
-            fig.tight_layout(rect=(0, 0.06, 1, 1))
+            fig.tight_layout()
             out = figures_dir / f"exp3_{fig_id}_{metric}.png"
             fig.savefig(out, dpi=150, bbox_inches="tight")
             plt.close(fig)
@@ -378,12 +349,11 @@ def write_figures(
 
     # Figure 0e — mule-only propulsion energy. A1 has no mule, so this
     # is a separate three-arm comparison (A2/A3/A4) on the Eq. 5 cost
-    # ledger. Lives alongside the federation-metric figures because
-    # the energy trade-off is part of the same A4-vs-rest story.
+    # ledger.
     try:
         mule_arms = [a for a in ("A2", "A3", "A4") if a in arms]
         if len(mule_arms) >= 2:
-            fig, ax = plt.subplots(figsize=(6.5, 4.5))
+            fig, ax = plt.subplots(figsize=(6, 4))
             data: List[List[float]] = []
             labels: List[str] = []
             for arm in mule_arms:
@@ -398,25 +368,23 @@ def write_figures(
             if data:
                 ax.boxplot(data, labels=labels, showmeans=True)
             ax.set_ylabel("Propulsion energy per mission (J)")
-            ax.set_xlabel("Arm (mule-only — A1 has no mule)")
-            ax.set_title(
-                "Propulsion energy  (↓ lower is better)", fontsize=11,
-            )
+            ax.set_xlabel("Arm")
             ax.grid(True, axis="y", alpha=0.3)
-            fig.text(
-                0.5, 0.02,
-                r"Eq. 5: $E = T_{mission} \cdot P_{idle} + B_{tx} \cdot \epsilon_{bit} + L_{path} \cdot \epsilon_{prop}$",
-                ha="center", va="bottom", fontsize=9,
-                style="italic", color="#444444",
-            )
             _watermark(ax)
-            fig.tight_layout(rect=(0, 0.06, 1, 1))
+            fig.tight_layout()
             out = figures_dir / "exp3_fig0e_propulsion_energy.png"
             fig.savefig(out, dpi=150, bbox_inches="tight")
             plt.close(fig)
             written.append(out)
     except Exception as e:  # pragma: no cover
         log.warning("fig0e (propulsion energy) skipped: %s", e)
+
+    # Emit LaTeX caption blocks for every metric figure produced above.
+    try:
+        latex_path = _write_latex_captions(figures_dir)
+        written.append(latex_path)
+    except Exception as e:  # pragma: no cover
+        log.warning("LaTeX captions skipped: %s", e)
 
     # 1 + 2 + 3 — paired tests CSV (three rows: A2vsA1, A3vsA2, A4vsA3).
     try:
@@ -616,6 +584,115 @@ def write_figures(
         log.warning("fig6 skipped: %s", e)
 
     return written
+
+
+# --------------------------------------------------------------------------- #
+# LaTeX caption emitter — pairs with the bare PNG figures
+# --------------------------------------------------------------------------- #
+
+# (file_stem, label_id, short_caption, full_caption_body)
+# Kept module-level so the test suite + the paper toolchain can import
+# them without re-running the figure generation.
+_LATEX_CAPTIONS: tuple = (
+    (
+        "exp3_fig0a_update_yield",
+        "fig:exp3:update_yield",
+        "Update yield across arms",
+        (
+            r"\textbf{Update yield} per round across A1 (centralized FL), "
+            r"A2 (arrival-order), A3 (EDF heuristic), A4 (RL). "
+            r"Higher is better. Update yield is the mean count of "
+            r"client updates aggregated per round; it captures how "
+            r"effectively each scheduling strategy converts a round "
+            r"of mission time into committed FL contributions."
+        ),
+    ),
+    (
+        "exp3_fig0b_round_close_rate_kminhalf",
+        "fig:exp3:close_rate",
+        "Round close rate (k\\textsubscript{min} = N/2) across arms",
+        (
+            r"\textbf{Round close rate} at $k_{\min} = N/2$ across the "
+            r"four arms. Higher is better. A round closes when at "
+            r"least $k_{\min}$ aggregated updates arrive within "
+            r"deadline; the metric thus rewards consistency rather "
+            r"than averaging high-yield and empty rounds."
+        ),
+    ),
+    (
+        "exp3_fig0c_jains_fairness",
+        "fig:exp3:fairness",
+        "Jain's fairness across arms",
+        (
+            r"\textbf{Jain's fairness index} on per-device service "
+            r"counts, $J = (\sum_i x_i)^2 / (N \cdot \sum_i x_i^2)$, "
+            r"range $[1/N, 1]$. Higher is better; $J = 1$ is "
+            r"perfectly equal service. The metric exposes whether a "
+            r"scheduling strategy concentrates service on a small "
+            r"subset of devices or spreads it across the slice."
+        ),
+    ),
+    (
+        "exp3_fig0d_coverage",
+        "fig:exp3:coverage",
+        "Coverage across arms",
+        (
+            r"\textbf{Coverage} across the four arms, defined as the "
+            r"fraction of scheduled devices serviced at least once "
+            r"during the mission. Higher is better; range $[0, 1]$. "
+            r"Coverage is the binary complement of the per-device "
+            r"miss rate and is independent of how many times a "
+            r"device was served beyond the first visit."
+        ),
+    ),
+    (
+        "exp3_fig0e_propulsion_energy",
+        "fig:exp3:propulsion_energy",
+        "Mule propulsion energy across mule arms",
+        (
+            r"\textbf{Propulsion energy per mission} (joules) for the "
+            r"three mule arms (A1 has no mule and is therefore "
+            r"omitted). Lower is better. Computed via Eq.~5: "
+            r"$E = T_{\text{mission}} \cdot P_{\text{idle}} + "
+            r"B_{\text{tx}} \cdot \varepsilon_{\text{bit}} + "
+            r"L_{\text{path}} \cdot \varepsilon_{\text{prop}}$. "
+            r"A4 typically incurs higher propulsion energy than A2/A3 "
+            r"in exchange for the completion gains visible in "
+            r"Fig.~\ref{fig:exp3:update_yield}; this figure makes "
+            r"that trade-off explicit."
+        ),
+    ),
+)
+
+
+def _write_latex_captions(figures_dir: Path) -> Path:
+    """Emit a ``.tex`` snippet with one ``\\begin{figure}`` per metric.
+
+    The figures themselves carry no titles or footer text — all the
+    explanation lives in the LaTeX caption produced here, which the
+    paper can ``\\input{}`` directly.
+    """
+    out = figures_dir / "exp3_fig_captions.tex"
+    figures_dir.mkdir(parents=True, exist_ok=True)
+    lines: List[str] = [
+        "% Auto-generated by experiments.analysis.exp3.write_figures().",
+        "% One \\begin{figure} block per metric figure produced alongside",
+        "% this file. The PNGs carry no titles or footers; all caption",
+        "% text lives here so the paper owns the prose layer.",
+        "",
+    ]
+    for stem, label, short, full in _LATEX_CAPTIONS:
+        lines.extend([
+            r"\begin{figure}[t]",
+            r"  \centering",
+            f"  \\includegraphics[width=0.7\\linewidth]{{figures/exp3/{stem}.png}}",
+            f"  \\caption[{short}]{{{full}}}",
+            f"  \\label{{{label}}}",
+            r"\end{figure}",
+            "",
+        ])
+    out.write_text("\n".join(lines), encoding="utf-8")
+    return out
 
 
 # --------------------------------------------------------------------------- #

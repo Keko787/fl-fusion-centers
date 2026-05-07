@@ -170,3 +170,16 @@ def test_write_figures_smoke(tmp_path: Path):
     assert "exp3_fig0c_jains_fairness.png" in written_names
     assert "exp3_fig0d_coverage.png" in written_names
     assert "exp3_fig0e_propulsion_energy.png" in written_names
+    # LaTeX caption sidecar — one \begin{figure} per metric figure.
+    assert "exp3_fig_captions.tex" in written_names
+    tex = (figs_dir / "exp3_fig_captions.tex").read_text(encoding="utf-8")
+    for stem in (
+        "exp3_fig0a_update_yield", "exp3_fig0b_round_close_rate_kminhalf",
+        "exp3_fig0c_jains_fairness", "exp3_fig0d_coverage",
+        "exp3_fig0e_propulsion_energy",
+    ):
+        assert stem in tex, f"caption .tex missing reference to {stem}"
+    # Use \end{figure} as the canonical count — \begin{figure} appears
+    # in the file's leading comment line as well.
+    assert tex.count(r"\end{figure}") == 5
+    assert r"\caption" in tex and r"\label" in tex
