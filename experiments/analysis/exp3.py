@@ -579,15 +579,17 @@ def write_figures(
                        label=f"N = {N}")
                 for i, N in enumerate(Ns)
             ]
+            # With A1 omitted, the mule-arm lines sit in the upper
+            # half of the rescaled y-axis (≈ 1.0–2.2 yield). Drop the
+            # Arm legend to the lower-left so it doesn't crash into
+            # the dotted N=20 line at the top, and keep the
+            # bucket-size legend at upper-right where the band above
+            # the dotted line is clear.
             arm_legend = ax.legend(
                 handles=arm_handles, title="Arm",
-                loc="upper left", fontsize=9, title_fontsize=9,
+                loc="lower left", fontsize=9, title_fontsize=9,
             )
             ax.add_artist(arm_legend)
-            # With A1 omitted from this figure the data sits in the
-            # 0.8 – 2.2 yield range, so the bucket-size legend can
-            # return to the natural upper-right corner without
-            # crossing any line.
             ax.legend(
                 handles=n_handles, title="Bucket size",
                 loc="upper right", fontsize=9, title_fontsize=9,
