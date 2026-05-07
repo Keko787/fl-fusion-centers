@@ -417,7 +417,10 @@ def write_figures(
                 ax.set_xticks(tick_positions)
                 ax.set_xticklabels(kept_arms)
                 labels = kept_arms
-                # Custom legend mapping color → regime.
+                # Place the regime legend below the x-axis labels in a
+                # horizontal layout so it cannot overlap A1's tall
+                # upper-bound box, the upper-bound region annotations,
+                # or any high-value outliers in the jittery cells.
                 from matplotlib.patches import Patch
                 ax.legend(
                     handles=[
@@ -426,8 +429,12 @@ def write_figures(
                         Patch(facecolor=jittery_color, alpha=0.65,
                               label="Jittery (2% loss + 30% jit.)"),
                     ],
-                    loc="upper right", fontsize=9,
+                    loc="upper center",
+                    bbox_to_anchor=(0.5, -0.15),
+                    ncol=2,
+                    fontsize=9,
                     title="Network regime", title_fontsize=9,
+                    frameon=True,
                 )
             else:
                 # Single-regime mode: original single-box behaviour.
@@ -539,8 +546,12 @@ def write_figures(
                         Patch(facecolor=jittery_color, alpha=0.65,
                               label="Jittery (2% loss + 30% jit.)"),
                     ],
-                    loc="upper right", fontsize=9,
+                    loc="upper center",
+                    bbox_to_anchor=(0.5, -0.15),
+                    ncol=2,
+                    fontsize=9,
                     title="Network regime", title_fontsize=9,
+                    frameon=True,
                 )
             else:
                 data: List[List[float]] = []
