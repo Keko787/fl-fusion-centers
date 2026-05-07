@@ -579,15 +579,18 @@ def write_figures(
                        label=f"N = {N}")
                 for i, N in enumerate(Ns)
             ]
-            # With A1 omitted, the mule-arm lines sit in the upper
-            # half of the rescaled y-axis (≈ 1.0–2.2 yield). Drop the
-            # Arm legend to the lower-left so it doesn't crash into
-            # the dotted N=20 line at the top, and keep the
-            # bucket-size legend at upper-right where the band above
-            # the dotted line is clear.
+            # With A1 omitted, the mule-arm lines cluster at three
+            # discrete yield bands: ≈ 1.0 (N=5 solid), ≈ 1.4
+            # (N=10 dashed), ≈ 2.0 (N=20 dotted). Park the Arm legend
+            # in the empty band between the N=10 and N=20 lines (data
+            # y ≈ 1.4 – 2.0, which corresponds to axes-fraction ≈
+            # 0.4 – 0.8 once the y-axis auto-scales). Anchoring at
+            # axes-fraction 0.6 with vertical centring puts the
+            # legend's middle near data y ≈ 1.7.
             arm_legend = ax.legend(
                 handles=arm_handles, title="Arm",
-                loc="lower left", fontsize=9, title_fontsize=9,
+                loc="center left", bbox_to_anchor=(0.02, 0.6),
+                fontsize=9, title_fontsize=9,
             )
             ax.add_artist(arm_legend)
             ax.legend(
