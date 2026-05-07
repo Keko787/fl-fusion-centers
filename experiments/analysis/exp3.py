@@ -487,17 +487,31 @@ def write_figures(
     except Exception as e:  # pragma: no cover
         log.warning("fig3 skipped: %s", e)
 
-    # Figure 4 — β-sweep curve, faceted by N.
+    # Figure 4 — β-sweep, all N values overlaid on one panel.
+    # Color encodes arm; line style + marker encode N. Two legends so
+    # the reader can decode either dimension independently.
     try:
         Ns = sorted({r.N for r in rows if r.is_ok})
         if Ns and arms:
-            fig, axes = plt.subplots(1, len(Ns), figsize=(4 * len(Ns), 4),
-                                     sharey=True)
-            if len(Ns) == 1:
-                axes = [axes]
-            for ax, N in zip(axes, Ns):
-                betas = sorted({r.beta for r in rows if r.is_ok and r.N == N})
-                for arm in arms:
+            # Stable color per arm so identity carries across figures.
+            arm_colors = {
+                "A1": "tab:blue", "A2": "tab:orange",
+                "A3": "tab:green", "A4": "tab:red",
+            }
+            # Line style + marker per N (more N values cycle through
+            # the lists; three is the typical case).
+            n_styles = ["-", "--", ":"]
+            n_markers = ["o", "s", "^"]
+
+            fig, ax = plt.subplots(figsize=(7.5, 5))
+            arms_in_data = [a for a in ("A1", "A2", "A3", "A4") if a in arms]
+            for arm in arms_in_data:
+                color = arm_colors.get(arm, "black")
+                for i, N in enumerate(Ns):
+                    style = n_styles[i % len(n_styles)]
+                    marker = n_markers[i % len(n_markers)]
+                    betas = sorted({r.beta for r in rows
+                                    if r.is_ok and r.N == N})
                     ys: List[float] = []
                     for b in betas:
                         cell = [r for r in rows
@@ -505,13 +519,41 @@ def write_figures(
                                 and r.N == N and r.beta == b]
                         ys.append(np.mean([r.update_yield for r in cell])
                                   if cell else float("nan"))
-                    ax.plot(betas, ys, marker="o", label=arm)
-                ax.set_xlabel("β (deadline tightness)")
-                ax.set_ylabel("Update yield")
-                ax.set_title(f"N = {N}")
-                ax.legend(fontsize=8)
-                _watermark(ax)
-            fig.suptitle("Update yield vs β (slope-vs-cliff)")
+                    ax.plot(
+                        betas, ys,
+                        color=color, linestyle=style, marker=marker,
+                        markersize=6, linewidth=1.8,
+                    )
+            ax.set_xlabel("β (deadline tightness)")
+            ax.set_ylabel("Update yield (mean)")
+            ax.grid(True, alpha=0.3)
+
+            # Two legends: arm (color) and N (line style). Drawn as
+            # proxy artists so they don't clutter the data lines.
+            from matplotlib.lines import Line2D
+            arm_handles = [
+                Line2D([0], [0], color=arm_colors.get(a, "black"),
+                       linewidth=2, label=a)
+                for a in arms_in_data
+            ]
+            n_handles = [
+                Line2D([0], [0], color="black",
+                       linestyle=n_styles[i % len(n_styles)],
+                       marker=n_markers[i % len(n_markers)],
+                       linewidth=1.8, markersize=6,
+                       label=f"N = {N}")
+                for i, N in enumerate(Ns)
+            ]
+            arm_legend = ax.legend(
+                handles=arm_handles, title="Arm",
+                loc="upper left", fontsize=9, title_fontsize=9,
+            )
+            ax.add_artist(arm_legend)
+            ax.legend(
+                handles=n_handles, title="Bucket size",
+                loc="upper right", fontsize=9, title_fontsize=9,
+            )
+            _watermark(ax)
             fig.tight_layout()
             out = figures_dir / "exp3_fig4_beta_sweep.png"
             fig.savefig(out, dpi=150, bbox_inches="tight")
