@@ -297,16 +297,43 @@ def write_figures(
     # Figures 0a-0d — all-arms comparison, one figure per metric.
     # Shows A1/A2/A3/A4 side by side so the progressive-sophistication
     # story (no scheduling -> arrival -> EDF -> RL) is visible per
-    # metric. Split into separate files so each can be embedded
-    # independently in the paper at the size the figure caption needs.
+    # metric. Each figure carries the metric's definition + direction
+    # of improvement so the reader doesn't need to cross-reference the
+    # paper text.
     arms_order = [a for a in ("A1", "A2", "A3", "A4") if a in arms]
+    # (fig_id, attribute, short title, y-axis label, formula/definition,
+    # direction marker for the title)
     metric_figs = [
-        ("fig0a", "update_yield", "Update yield"),
-        ("fig0b", "round_close_rate_kminhalf", "Round close rate (k_min = N/2)"),
-        ("fig0c", "jains_fairness", "Jain's fairness"),
-        ("fig0d", "coverage", "Coverage"),
+        (
+            "fig0a", "update_yield",
+            "Update yield",
+            "Updates aggregated per round (mean)",
+            "Mean count of FL client updates aggregated per round",
+            "↑ higher is better",
+        ),
+        (
+            "fig0b", "round_close_rate_kminhalf",
+            "Round close rate",
+            "Fraction of rounds closed (k_min = N/2)",
+            r"Fraction of rounds with $\geq$ N/2 updates within deadline",
+            "↑ higher is better",
+        ),
+        (
+            "fig0c", "jains_fairness",
+            "Jain's fairness",
+            "Jain's fairness index (1.0 = equal service)",
+            r"$J = (\Sigma x_i)^2 / (N \cdot \Sigma x_i^2)$  on per-device service counts",
+            "↑ higher is better (range $[1/N, 1]$)",
+        ),
+        (
+            "fig0d", "coverage",
+            "Coverage",
+            "Fraction of scheduled devices serviced (≥ 1 visit)",
+            "Devices served at least once / total scheduled devices",
+            "↑ higher is better (range $[0, 1]$)",
+        ),
     ]
-    for fig_id, metric, title in metric_figs:
+    for fig_id, metric, short_title, ylabel, definition, direction in metric_figs:
         try:
             if len(arms_order) < 2:
                 continue
@@ -323,18 +350,25 @@ def write_figures(
                     labels.append(arm)
             if not data:
                 continue
-            fig, ax = plt.subplots(figsize=(6, 4))
+            fig, ax = plt.subplots(figsize=(6.5, 4.5))
             ax.boxplot(
                 data, labels=labels, showmeans=True,
                 meanprops={"marker": "D", "markerfacecolor": "white",
                            "markeredgecolor": "black", "markersize": 6},
             )
-            ax.set_ylabel(title)
+            ax.set_ylabel(ylabel)
             ax.set_xlabel("Arm")
-            ax.set_title(f"All arms — {title}")
+            ax.set_title(f"{short_title}  ({direction})", fontsize=11)
             ax.grid(True, axis="y", alpha=0.3)
+            # Caption under the x-axis explaining what the metric means.
+            fig.text(
+                0.5, 0.02, definition,
+                ha="center", va="bottom", fontsize=9,
+                style="italic", color="#444444", wrap=True,
+            )
             _watermark(ax)
-            fig.tight_layout()
+            # Leave room at the bottom for the caption.
+            fig.tight_layout(rect=(0, 0.06, 1, 1))
             out = figures_dir / f"exp3_{fig_id}_{metric}.png"
             fig.savefig(out, dpi=150, bbox_inches="tight")
             plt.close(fig)
@@ -349,7 +383,7 @@ def write_figures(
     try:
         mule_arms = [a for a in ("A2", "A3", "A4") if a in arms]
         if len(mule_arms) >= 2:
-            fig, ax = plt.subplots(figsize=(6, 4))
+            fig, ax = plt.subplots(figsize=(6.5, 4.5))
             data: List[List[float]] = []
             labels: List[str] = []
             for arm in mule_arms:
@@ -364,11 +398,19 @@ def write_figures(
             if data:
                 ax.boxplot(data, labels=labels, showmeans=True)
             ax.set_ylabel("Propulsion energy per mission (J)")
-            ax.set_xlabel("Arm")
-            ax.set_title("Mule arms — energy cost (Eq. 5)")
+            ax.set_xlabel("Arm (mule-only — A1 has no mule)")
+            ax.set_title(
+                "Propulsion energy  (↓ lower is better)", fontsize=11,
+            )
             ax.grid(True, axis="y", alpha=0.3)
+            fig.text(
+                0.5, 0.02,
+                r"Eq. 5: $E = T_{mission} \cdot P_{idle} + B_{tx} \cdot \epsilon_{bit} + L_{path} \cdot \epsilon_{prop}$",
+                ha="center", va="bottom", fontsize=9,
+                style="italic", color="#444444",
+            )
             _watermark(ax)
-            fig.tight_layout()
+            fig.tight_layout(rect=(0, 0.06, 1, 1))
             out = figures_dir / "exp3_fig0e_propulsion_energy.png"
             fig.savefig(out, dpi=150, bbox_inches="tight")
             plt.close(fig)
