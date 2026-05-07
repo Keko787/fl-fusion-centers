@@ -1,0 +1,177 @@
+"""EX-3 driver tests — A1 + mule arm + grid driver dispatch."""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+import pytest
+
+from experiments.calibration import Exp3Calibration
+from experiments.exp3.arm_a1 import A1Config, run_a1_trial
+from experiments.exp3.arm_mule import MuleArmConfig, run_mule_trial
+from experiments.exp3.driver import ARMS, Exp3Driver
+from experiments.exp3.sim_env import Exp3SimConfig
+from experiments.runner import Cell
+
+from hermes.scheduler.policies import ArrivalOrderPolicy, EdfFeasibilityPolicy
+from hermes.scheduler.policies.edf_feasibility import FeasibilityModel
+
+
+def _fake_cal() -> Exp3Calibration:
+    return Exp3Calibration(
+        P_idle_W=2.0,
+        epsilon_bit_J_per_bit=1e-9,
+        epsilon_prop_J_per_m=10.0,
+        mule_cruise_speed_m_s=5.0,
+    )
+
+
+# --------------------------------------------------------------------------- #
+# A1
+# --------------------------------------------------------------------------- #
+
+def test_a1_returns_summary_with_no_mule_fields():
+    cfg = A1Config(n_clients=5, n_rounds=3, seed=0)
+    s = run_a1_trial(cfg)
+    assert s.rho_contact is None
+    assert s.propulsion_energy_J is None
+    # update_yield bounded by client count.
+    assert 0.0 <= s.update_yield <= 5.0
+
+
+def test_a1_is_deterministic_under_same_seed():
+    cfg = A1Config(n_clients=4, n_rounds=5, seed=123)
+    a = run_a1_trial(cfg)
+    b = run_a1_trial(cfg)
+    assert a.update_yield == b.update_yield
+    assert a.jains_fairness == b.jains_fairness
+
+
+def test_a1_invalid_config_rejected():
+    with pytest.raises(ValueError):
+        run_a1_trial(A1Config(n_clients=0))
+    with pytest.raises(ValueError):
+        run_a1_trial(A1Config(n_rounds=0))
+    with pytest.raises(ValueError):
+        run_a1_trial(A1Config(client_fraction=0.0))
+
+
+# --------------------------------------------------------------------------- #
+# Mule arms
+# --------------------------------------------------------------------------- #
+
+def _mule_cfg(arm_name: str = "A2") -> MuleArmConfig:
+    return MuleArmConfig(
+        arm_name=arm_name,
+        sim=Exp3SimConfig(
+            n_devices=6, beta=1.0, deadline_heterogeneity=False,
+            rf_range_m=120.0,        # tightly clustered into few contacts
+            mission_budget_s=600.0,
+            seed=0,
+        ),
+    )
+
+
+def test_mule_a2_runs_to_completion():
+    s = run_mule_trial(cfg=_mule_cfg("A2"), policy=ArrivalOrderPolicy())
+    assert s.rho_contact is not None and s.rho_contact >= 1.0
+    # update_yield bounded by member count of the largest contact (≤ N).
+    assert s.update_yield >= 0.0
+
+
+def test_mule_a3_runs_to_completion():
+    pol = EdfFeasibilityPolicy(model=FeasibilityModel(
+        cruise_speed_m_s=5.0, session_time_s=30.0,
+        default_mission_budget_s=600.0,
+    ))
+    s = run_mule_trial(cfg=_mule_cfg("A3"), policy=pol)
+    assert s.rho_contact is not None
+
+
+def test_mule_a4_smoke_with_default_selector():
+    from hermes.scheduler.selector import TargetSelectorRL
+
+    sel = TargetSelectorRL(epsilon=0.0, rng_seed=0)
+    s = run_mule_trial(cfg=_mule_cfg("A4"), policy=sel)
+    assert s.update_yield >= 0.0
+
+
+def test_mule_propulsion_energy_present_when_cal_supplied():
+    s = run_mule_trial(
+        cfg=_mule_cfg("A2"),
+        policy=ArrivalOrderPolicy(),
+        cal=_fake_cal(),
+    )
+    assert s.propulsion_energy_J is not None
+    assert s.propulsion_energy_J > 0.0
+
+
+# --------------------------------------------------------------------------- #
+# Driver dispatch
+# --------------------------------------------------------------------------- #
+
+def _cell(arm: str) -> Cell:
+    return Cell(
+        cell_id="N=5|beta=1.0|deadline_het=False|rrf=60.0",
+        arm=arm,
+        trial_index=0,
+        seed=42,
+        params={"N": 5, "beta": 1.0, "deadline_het": False, "rrf": 60.0},
+    )
+
+
+def test_driver_dispatches_each_arm():
+    drv = Exp3Driver(calibration=_fake_cal())
+    for arm in ARMS:
+        row = drv.run_trial(_cell(arm))
+        assert "update_yield" in row
+        assert row["n_devices"] == 5
+        assert row["beta"] == 1.0
+        assert row["deadline_het"] is False
+        assert row["rf_range_m"] == 60.0
+        if arm == "A1":
+            assert row["rho_contact"] == ""  # CSV-blank for None
+        else:
+            assert row["rho_contact"] != ""
+
+
+def test_driver_rejects_unknown_arm():
+    drv = Exp3Driver(calibration=_fake_cal())
+    with pytest.raises(ValueError):
+        drv.run_trial(_cell("Z9"))
+
+
+# --------------------------------------------------------------------------- #
+# End-to-end via the EX-0 runner — smoke
+# --------------------------------------------------------------------------- #
+
+def test_runner_writes_csv_for_all_arms(tmp_path: Path):
+    from experiments.runner import TrialGrid, TrialRunner
+    from experiments.exp3.metrics import Exp3MetricSummary
+
+    grid = TrialGrid(
+        independent_vars={
+            "N": [5],
+            "beta": [1.0],
+            "rrf": [120.0],
+            "deadline_het": [False],
+        },
+        arms=list(ARMS),
+        n_trials=2,
+        base_seed=42,
+    )
+    drv = Exp3Driver(calibration=_fake_cal())
+    csv_path = tmp_path / "exp3_smoke.csv"
+    runner = TrialRunner(
+        grid=grid,
+        log_path=csv_path,
+        metric_columns=Exp3MetricSummary.csv_columns() + [
+            "n_devices", "beta", "deadline_het", "rf_range_m",
+        ],
+        timeout_s=60.0,
+    )
+    n = runner.run(drv.run_trial)
+    assert n == 4 * 2  # 4 arms × 2 trials
+    contents = csv_path.read_text(encoding="utf-8")
+    for arm in ARMS:
+        assert f",{arm}," in contents
