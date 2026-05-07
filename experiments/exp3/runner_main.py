@@ -43,6 +43,7 @@ def _build_grid(
     betas: Sequence[float],
     rrfs: Sequence[float],
     deadline_het_modes: Sequence[bool],
+    jittery_modes: Sequence[bool],
     n_trials: int,
     base_seed: int = 42,
 ) -> TrialGrid:
@@ -52,6 +53,7 @@ def _build_grid(
             "beta": list(betas),
             "rrf": list(rrfs),
             "deadline_het": list(deadline_het_modes),
+            "jittery": list(jittery_modes),
         },
         arms=list(arms),
         n_trials=n_trials,
@@ -70,6 +72,7 @@ def _metric_columns() -> list[str]:
         "beta",
         "deadline_het",
         "rf_range_m",
+        "jittery",
     ]
 
 
@@ -84,13 +87,51 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                         help="Which arms to run; subset of A1 A2 A3 A4.")
     parser.add_argument("--N", nargs="+", type=int, default=[5, 10, 20],
                         help="Bucket-size sweep.")
-    parser.add_argument("--beta", nargs="+", type=float, default=[0.5, 1.0, 2.0],
-                        help="Deadline-tightness sweep.")
+    parser.add_argument(
+        "--beta", nargs="+", type=float,
+        default=[0.25, 0.5, 1.0, 2.0],
+        help=(
+            "Deadline-tightness sweep. β scales the mission budget "
+            "(mission_budget * β). β=0.25 yields a budget-tight regime "
+            "where A3's feasibility filter actually fires; the relaxed "
+            "values (β >= 1.0) are the budget-rich regime where the "
+            "filter never triggers."
+        ),
+    )
     parser.add_argument("--rrf", nargs="+", type=float, default=[30.0, 60.0, 120.0],
                         help="rf_range_m sweep.")
     parser.add_argument("--deadline-het", nargs="+", type=int,
                         default=[0, 1],
                         help="0 = uniform deadlines; 1 = heterogeneous.")
+    parser.add_argument(
+        "--jittery", nargs="+", type=int, default=[0, 1],
+        help=(
+            "Network-link jitter axis. 0 = clean (no packet loss, no "
+            "latency jitter); 1 = jittery (2%% packet loss + 30%% "
+            "latency jitter, matching Exp.\\ 1's --jittery cell). "
+            "Default sweeps both so the paper can compare the "
+            "scheduling ablation across clean and jittery conditions. "
+            "Pass `--jittery 0` to skip the jittery cells."
+        ),
+    )
+    parser.add_argument(
+        "--upload-bytes", type=float, default=1.0e7,
+        help=(
+            "Bytes uploaded per contact. Default 10 MB matches a "
+            "typical FL gradient payload. Set to 0 to disable the "
+            "upload term (legacy 'calibration-free' mode used by the "
+            "first paper-draft sweep)."
+        ),
+    )
+    parser.add_argument(
+        "--upload-bps", type=float, default=1.0e6,
+        help=(
+            "Nominal upload rate in bits/sec at the BS. Default 1 Mbps "
+            "is a typical mule-edge link. The simulator scales this by "
+            "an inverse-distance falloff and ±20%% jitter so distant "
+            "contacts get worse rates than near-BS contacts."
+        ),
+    )
     parser.add_argument("--timeout-s", type=float, default=300.0,
                         help="Soft per-trial timeout (warning only).")
     parser.add_argument(
@@ -121,6 +162,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         betas=args.beta,
         rrfs=args.rrf,
         deadline_het_modes=[bool(b) for b in args.deadline_het],
+        jittery_modes=[bool(b) for b in args.jittery],
         n_trials=args.n_trials,
         base_seed=args.base_seed,
     )
@@ -142,7 +184,15 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             parser.error(msg)
         log.warning(msg)
 
-    driver = Exp3Driver(selector_a4=selector_a4)
+    driver = Exp3Driver(
+        selector_a4=selector_a4,
+        upload_bytes_per_contact=float(args.upload_bytes),
+        nominal_upload_bps=float(args.upload_bps),
+    )
+    log.info(
+        "upload model: %g bytes / contact at %g bps nominal",
+        args.upload_bytes, args.upload_bps,
+    )
     runner = TrialRunner(
         grid=grid,
         log_path=args.csv,

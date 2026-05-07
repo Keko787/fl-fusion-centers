@@ -37,10 +37,26 @@ ARMS = ("A1", "A2", "A3", "A4")
 
 @dataclass
 class Exp3Driver:
-    """Owns the per-trial dispatch + the (optional) shared A4 selector."""
+    """Owns the per-trial dispatch + the (optional) shared A4 selector.
+
+    ``upload_bytes_per_contact`` and ``nominal_upload_bps`` set the
+    sim's upload model. The defaults (10 MB at 1 Mbps) put genuine
+    pressure on A3's feasibility filter; legacy "calibration-free"
+    runs used 0 bytes and had a toothless filter, so the runner_main
+    CLI and any caller wanting paper-grade results should pass
+    realistic values.
+    """
 
     calibration: Optional[Exp3Calibration] = None
     selector_a4: Optional[TargetSelectorRL] = None
+    upload_bytes_per_contact: float = 1.0e7
+    nominal_upload_bps: float = 1.0e6
+    # Default jittery-mode parameters at the driver level. Per-cell
+    # overrides via ``cell.params['jittery']`` (bool) flip these to
+    # the Exp.\ 1 jittery values (2% loss, 30% latency jitter) for
+    # that cell. See ``runner_main.py``'s ``--jittery`` axis.
+    packet_loss_pct: float = 0.0
+    latency_jitter_pct: float = 0.0
 
     def __post_init__(self) -> None:
         if self.calibration is None:
@@ -75,6 +91,7 @@ class Exp3Driver:
         row["beta"] = float(params.get("beta", 1.0))
         row["deadline_het"] = bool(params.get("deadline_het", False))
         row["rf_range_m"] = float(params.get("rrf", params.get("rf_range_m", 60.0)))
+        row["jittery"] = bool(params.get("jittery", False))
         return row
 
     # ------------------------------------------------------------------ #
@@ -99,6 +116,17 @@ class Exp3Driver:
     def _run_mule(
         self, cell: Cell, params: Mapping[str, Any], arm: str,
     ) -> Exp3MetricSummary:
+        # Jittery cells flip the Exp.\ 1-parity noise on (2% packet
+        # loss + 30% latency jitter). Clean cells leave it at the
+        # driver default (typically 0).
+        jittery = bool(params.get("jittery", False))
+        if jittery:
+            packet_loss = max(self.packet_loss_pct, 2.0)
+            latency_jitter = max(self.latency_jitter_pct, 30.0)
+        else:
+            packet_loss = self.packet_loss_pct
+            latency_jitter = self.latency_jitter_pct
+
         sim_cfg = Exp3SimConfig(
             n_devices=int(params.get("N", params.get("n_devices", 10))),
             beta=float(params.get("beta", 1.0)),
@@ -106,9 +134,14 @@ class Exp3Driver:
             rf_range_m=float(params.get("rrf", params.get("rf_range_m", 60.0))),
             mission_budget_s=float(params.get("mission_budget_s", 600.0)),
             upload_bytes_per_contact=float(
-                params.get("upload_bytes_per_contact", 0.0)
+                params.get("upload_bytes_per_contact",
+                           self.upload_bytes_per_contact)
             ),
-            nominal_upload_bps=float(params.get("nominal_upload_bps", 1.0e7)),
+            nominal_upload_bps=float(
+                params.get("nominal_upload_bps", self.nominal_upload_bps)
+            ),
+            packet_loss_pct=packet_loss,
+            latency_jitter_pct=latency_jitter,
             seed=cell.seed,
         )
         policy = self._policy_for(arm, sim_cfg)

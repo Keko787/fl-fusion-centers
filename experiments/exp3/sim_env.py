@@ -126,6 +126,24 @@ class Exp3SimConfig:
         (80.0, 100.0, 0.0),
     )
 
+    # ---------------------------------------------------------------- #
+    # Jittery-mode parameters — match Experiment 1's ``--jittery`` cell
+    # (tc/netem ±30% latency jitter + 2% packet loss) so the
+    # scheduling-layer ablation can be evaluated under the same
+    # network-link impairments. Default 0 leaves the simulator in its
+    # clean (non-jittery) state.
+    # ---------------------------------------------------------------- #
+    # Per-device completion is multiplied by an additional Bernoulli
+    # `(1 - packet_loss_pct/100)` on top of the existing
+    # reliability×rf_factor product. Set to 2.0 to mirror Exp.\ 1
+    # jittery.
+    packet_loss_pct: float = 0.0
+    # transit_s, upload_s, and collect_s are each multiplied by
+    # `Normal(1, latency_jitter_pct/100)` per call, clamped to
+    # ≥ 0.05× the deterministic value to prevent negative or
+    # implausibly small times. Set to 30.0 to mirror Exp.\ 1 jittery.
+    latency_jitter_pct: float = 0.0
+
     energy_weight: float = 1.0
     seed: Optional[int] = None
 
@@ -434,7 +452,23 @@ class Exp3Sim:
         upload_bytes = cfg.upload_bytes_per_contact
         upload_s = upload_bytes * 8.0 / max(upload_rate, 1e-6)
 
+        # Apply latency jitter (jittery-mode parity with Exp.\ 1's
+        # tc/netem ±30% latency jitter). Multiplies transit, collect,
+        # and upload by an independent Gaussian per call, clamped to a
+        # minimum 5% of the deterministic value to prevent zero or
+        # negative durations.
+        if cfg.latency_jitter_pct > 0.0:
+            sigma = cfg.latency_jitter_pct / 100.0
+            transit_s *= max(0.05, float(self._rng.normal(1.0, sigma)))
+            collect_s *= max(0.05, float(self._rng.normal(1.0, sigma)))
+            upload_s *= max(0.05, float(self._rng.normal(1.0, sigma)))
+
         per_device_completed: List[bool] = []
+        # Independent packet-loss probability applied per device on top
+        # of reliability×rf_factor (jittery-mode parity with Exp.\ 1's
+        # tc/netem 2% packet loss). Matches the Bernoulli-loss model
+        # netem applies to outgoing packets.
+        packet_keep_p = max(0.0, min(1.0, 1.0 - cfg.packet_loss_pct / 100.0))
         for did in contact.devices:
             dev = next((d for d in self._devices if d.device_id == did), None)
             if dev is None:
@@ -442,7 +476,10 @@ class Exp3Sim:
                 continue
             d_dist = _euclid(contact.position, dev.pos)
             rf_factor = max(0.4, 1.0 - d_dist / (3.0 * cfg.world_radius))
-            p_complete = max(0.0, min(1.0, dev.reliability * rf_factor))
+            p_complete = max(
+                0.0,
+                min(1.0, dev.reliability * rf_factor * packet_keep_p),
+            )
             completed = bool(self._rng.random() < p_complete)
             per_device_completed.append(completed)
             # Per-device service counters for fairness metrics.

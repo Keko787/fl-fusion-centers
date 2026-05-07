@@ -129,10 +129,43 @@ def test_driver_dispatches_each_arm():
         assert row["beta"] == 1.0
         assert row["deadline_het"] is False
         assert row["rf_range_m"] == 60.0
+        # New jittery axis defaults to False at the cell level.
+        assert row["jittery"] is False
         if arm == "A1":
             assert row["rho_contact"] == ""  # CSV-blank for None
         else:
             assert row["rho_contact"] != ""
+
+
+def test_driver_jittery_cell_activates_packet_loss():
+    """A cell with ``jittery=True`` must activate the Exp.\\ 1-parity
+    noise (2% packet loss + 30% latency jitter) — not the driver's
+    base packet_loss_pct/latency_jitter_pct fields.
+    """
+    drv = Exp3Driver(calibration=_fake_cal())
+    cell_clean = Cell(
+        cell_id="clean", arm="A2", trial_index=0, seed=42,
+        params={"N": 5, "beta": 1.0, "deadline_het": False,
+                "rrf": 60.0, "jittery": False},
+    )
+    cell_jittery = Cell(
+        cell_id="jittery", arm="A2", trial_index=0, seed=42,
+        params={"N": 5, "beta": 1.0, "deadline_het": False,
+                "rrf": 60.0, "jittery": True},
+    )
+    row_clean = drv.run_trial(cell_clean)
+    row_jittery = drv.run_trial(cell_jittery)
+    assert row_clean["jittery"] is False
+    assert row_jittery["jittery"] is True
+    # Sanity: the two trials use the same seed so they'd be
+    # bit-identical without noise. Adding 2% packet loss + 30%
+    # latency jitter must therefore produce a different mission
+    # completion time (or yield) on at least one cell — not asserting
+    # a direction, only divergence.
+    assert (
+        row_clean["mission_completion_s"] != row_jittery["mission_completion_s"]
+        or row_clean["update_yield"] != row_jittery["update_yield"]
+    )
 
 
 def test_driver_rejects_unknown_arm():
@@ -155,6 +188,7 @@ def test_runner_writes_csv_for_all_arms(tmp_path: Path):
             "beta": [1.0],
             "rrf": [120.0],
             "deadline_het": [False],
+            "jittery": [False],
         },
         arms=list(ARMS),
         n_trials=2,
@@ -166,7 +200,7 @@ def test_runner_writes_csv_for_all_arms(tmp_path: Path):
         grid=grid,
         log_path=csv_path,
         metric_columns=Exp3MetricSummary.csv_columns() + [
-            "n_devices", "beta", "deadline_het", "rf_range_m",
+            "n_devices", "beta", "deadline_het", "rf_range_m", "jittery",
         ],
         timeout_s=60.0,
     )
