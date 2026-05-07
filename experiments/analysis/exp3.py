@@ -703,10 +703,27 @@ _LATEX_CAPTIONS: tuple = (
             r"$E = T_{\text{mission}} \cdot P_{\text{idle}} + "
             r"B_{\text{tx}} \cdot \varepsilon_{\text{bit}} + "
             r"L_{\text{path}} \cdot \varepsilon_{\text{prop}}$. "
-            r"A4 typically incurs higher propulsion energy than A2/A3 "
-            r"in exchange for the completion gains visible in "
-            r"Fig.~\ref{fig:exp3:update_yield}; this figure makes "
-            r"that trade-off explicit."
+            r"The three mule arms produce overlapping distributions in "
+            r"the studied parameter range; the energy ledger does not "
+            r"discriminate among A2, A3, and A4."
+        ),
+    ),
+    (
+        "exp3_fig4_beta_sweep",
+        "fig:exp3:beta_sweep",
+        "Update yield versus deadline tightness, across arms and bucket sizes",
+        (
+            r"\textbf{Update yield versus deadline tightness $\beta$}, "
+            r"with bucket size $N$ encoded by line style "
+            r"(solid: $N=5$; dashed: $N=10$; dotted: $N=20$) and arm "
+            r"encoded by colour. A1 (centralized FL) scales with both "
+            r"$N$ and $\beta$ but saturates at $\beta \geq 1.0$, "
+            r"indicating that once deadlines admit the full sampled "
+            r"client set, additional slack provides no further gain. "
+            r"The mule arms (A2/A3/A4) scale with $N$ but are "
+            r"insensitive to $\beta$ at every $N$, isolating mule "
+            r"travel time as the binding constraint on "
+            r"contacts-per-mission."
         ),
     ),
 )

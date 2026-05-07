@@ -180,6 +180,8 @@ def test_write_figures_smoke(tmp_path: Path):
     ):
         assert stem in tex, f"caption .tex missing reference to {stem}"
     # Use \end{figure} as the canonical count — \begin{figure} appears
-    # in the file's leading comment line as well.
-    assert tex.count(r"\end{figure}") == 5
+    # in the file's leading comment line as well. Six figures: fig0a-e
+    # plus fig4 (consolidated β-sweep).
+    assert tex.count(r"\end{figure}") == 6
     assert r"\caption" in tex and r"\label" in tex
+    assert "fig:exp3:beta_sweep" in tex
