@@ -338,6 +338,30 @@ def write_figures(
             ax.set_ylabel(ylabel)
             ax.set_xlabel("Arm")
             ax.grid(True, axis="y", alpha=0.3)
+            # Vertical separator between A1 (centralized FL upper bound)
+            # and the mule-arm relay-FL ablation (A2/A3/A4). The metric
+            # is not directly comparable across the two groupings — A1's
+            # "round" parallelises clients, while the mule arms' "round"
+            # is one contact event — so the separator visually flags
+            # that the boxplot mixes a control with an ablation set.
+            if labels and labels[0] == "A1" and len(labels) > 1:
+                ax.axvline(x=1.5, color="#888888", linestyle="--",
+                           linewidth=1.4, alpha=0.85, zorder=0)
+                ymin, ymax = ax.get_ylim()
+                yspan = ymax - ymin
+                # Region labels just below the top of the plot.
+                ax.text(
+                    1.0, ymin + 0.96 * yspan,
+                    "Centralized FL\n(upper bound)",
+                    ha="center", va="top", fontsize=8.5,
+                    style="italic", color="#444444",
+                )
+                ax.text(
+                    (len(labels) + 2) / 2.0, ymin + 0.96 * yspan,
+                    "Mule relay-FL ablation",
+                    ha="center", va="top", fontsize=8.5,
+                    style="italic", color="#444444",
+                )
             _watermark(ax)
             fig.tight_layout()
             out = figures_dir / f"exp3_{fig_id}_{metric}.png"
@@ -557,6 +581,34 @@ def write_figures(
                 handles=n_handles, title="Bucket size",
                 loc="upper right", bbox_to_anchor=(1.0, 0.78),
                 fontsize=9, title_fontsize=9,
+            )
+            # Annotate the two distinct regimes the chart contains. A1
+            # (blue) is a centralized-FL upper bound — its yield reflects
+            # per-round client parallelism with no mule-transit
+            # constraint, so it is not directly comparable to A2/A3/A4
+            # on a per-round basis. The mule arms cluster at the bottom
+            # of the chart and constitute the relay-FL scheduling
+            # ablation. Text annotations make this distinction explicit
+            # on the figure itself rather than only in the caption.
+            ax.text(
+                0.97, 0.96,
+                "A1: centralized FL\n(upper-bound control,\nno mule constraint)",
+                transform=ax.transAxes,
+                ha="right", va="top", fontsize=8.5,
+                style="italic", color="tab:blue",
+                bbox=dict(boxstyle="round,pad=0.35",
+                          facecolor="white", edgecolor="tab:blue",
+                          alpha=0.85, linewidth=0.8),
+            )
+            ax.text(
+                0.97, 0.30,
+                "A2 / A3 / A4:\nmule relay-FL\nscheduling ablation",
+                transform=ax.transAxes,
+                ha="right", va="top", fontsize=8.5,
+                style="italic", color="#444444",
+                bbox=dict(boxstyle="round,pad=0.35",
+                          facecolor="white", edgecolor="#888888",
+                          alpha=0.85, linewidth=0.8),
             )
             _watermark(ax)
             fig.tight_layout()
