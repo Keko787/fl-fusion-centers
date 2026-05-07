@@ -29,11 +29,18 @@ the internals behind ``predict`` / ``update``.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Optional, Tuple
+from pathlib import Path
+from typing import Optional, Tuple, Union
 
 import numpy as np
 
 from .replay import ReplayBuffer, Transition
+
+
+# Format version for the on-disk weight file. Bump when the weight
+# layout changes incompatibly so older files refuse to load loudly
+# rather than silently producing garbage Q-values.
+_DDQN_WEIGHT_FORMAT_VERSION: int = 1
 
 
 @dataclass
@@ -230,3 +237,72 @@ class DDQN:
             b2=np.asarray(weights["b2"], dtype=np.float32).copy(),
         )
         self._target = self._online.copy()
+
+    # ------------------------------------------------------------------ #
+    # Disk I/O — npz format for trained-actor checkpoints
+    # ------------------------------------------------------------------ #
+
+    def save(self, path: Union[str, Path]) -> None:
+        """Write the online-net weights + architecture meta to ``path``.
+
+        The file layout is a numpy ``.npz`` archive carrying:
+
+        * ``W1``, ``b1``, ``W2``, ``b2`` — the trained online-net params
+        * ``feature_dim``, ``hidden`` — architecture sanity-check ints
+        * ``format_version`` — guard against silent layout drift
+
+        The target net isn't saved — :meth:`load` reconstructs it as a
+        copy of the online net (which is the post-sync state at any
+        sane checkpoint moment).
+        """
+        path = Path(path)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        np.savez(
+            path,
+            W1=self._online.W1, b1=self._online.b1,
+            W2=self._online.W2, b2=self._online.b2,
+            feature_dim=np.int64(self._feature_dim),
+            hidden=np.int64(self._hidden),
+            format_version=np.int64(_DDQN_WEIGHT_FORMAT_VERSION),
+        )
+
+    @classmethod
+    def load(
+        cls,
+        path: Union[str, Path],
+        *,
+        lr: float = 0.01,
+        gamma: float = 0.5,
+        target_sync_every: int = 200,
+    ) -> "DDQN":
+        """Construct a :class:`DDQN` populated with weights from ``path``.
+
+        Hyper-params (``lr``, ``gamma``, ``target_sync_every``) are not
+        persisted — they only affect *training*, and a loaded actor is
+        usually used for inference. Override at the call site if you're
+        resuming training.
+        """
+        path = Path(path)
+        if not path.exists():
+            raise FileNotFoundError(f"DDQN weight file not found: {path}")
+        data = np.load(path)
+        try:
+            version = int(data["format_version"])
+            if version != _DDQN_WEIGHT_FORMAT_VERSION:
+                raise ValueError(
+                    f"DDQN weight file {path} has format_version={version}, "
+                    f"expected {_DDQN_WEIGHT_FORMAT_VERSION}"
+                )
+            feature_dim = int(data["feature_dim"])
+            hidden = int(data["hidden"])
+            ddqn = cls(
+                feature_dim=feature_dim, hidden=hidden,
+                lr=lr, gamma=gamma, target_sync_every=target_sync_every,
+            )
+            ddqn.set_weights({
+                "W1": data["W1"], "b1": data["b1"],
+                "W2": data["W2"], "b2": data["b2"],
+            })
+            return ddqn
+        finally:
+            data.close()

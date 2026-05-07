@@ -26,8 +26,14 @@ from typing import Optional, Sequence
 
 from experiments.runner import TrialGrid, TrialRunner
 
+from hermes.scheduler.selector import TargetSelectorRL
+from hermes.scheduler.selector.ddqn import DDQN
+
 from .driver import ARMS, Exp3Driver
 from .metrics import Exp3MetricSummary
+
+
+log = logging.getLogger("experiments.exp3.runner_main")
 
 
 def _build_grid(
@@ -87,6 +93,21 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                         help="0 = uniform deadlines; 1 = heterogeneous.")
     parser.add_argument("--timeout-s", type=float, default=300.0,
                         help="Soft per-trial timeout (warning only).")
+    parser.add_argument(
+        "--selector-weights", type=Path, default=None,
+        help=(
+            "Path to a trained DDQN .npz produced by "
+            "experiments.exp3.train_a4. If omitted, A4 uses a "
+            "RANDOM-INIT network (smoke-test only — not paper-grade)."
+        ),
+    )
+    parser.add_argument(
+        "--require-trained-a4", action="store_true",
+        help=(
+            "Refuse to run when A4 would use random-init weights. "
+            "Set this on every paper-grade run."
+        ),
+    )
     args = parser.parse_args(argv)
 
     logging.basicConfig(
@@ -104,7 +125,24 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         base_seed=args.base_seed,
     )
 
-    driver = Exp3Driver()
+    selector_a4: Optional[TargetSelectorRL] = None
+    if args.selector_weights is not None:
+        ddqn = DDQN.load(args.selector_weights)
+        selector_a4 = TargetSelectorRL(ddqn=ddqn, epsilon=0.0)
+        log.info("loaded A4 selector weights from %s", args.selector_weights)
+    elif "A4" in args.arms:
+        msg = (
+            "A4 is in --arms but --selector-weights was not provided. "
+            "A4 will use random-init DDQN weights — results are not "
+            "paper-grade. Train weights first with "
+            "`python -m experiments.exp3.train_a4 --output PATH` and "
+            "re-run with --selector-weights PATH."
+        )
+        if args.require_trained_a4:
+            parser.error(msg)
+        log.warning(msg)
+
+    driver = Exp3Driver(selector_a4=selector_a4)
     runner = TrialRunner(
         grid=grid,
         log_path=args.csv,
