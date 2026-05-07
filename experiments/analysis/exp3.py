@@ -294,62 +294,62 @@ def write_figures(
 
     arms = sorted({r.arm for r in rows if r.is_ok})
 
-    # Figure 0 — all-arms comparison panel (the paper's headline figure).
-    # Shows A1/A2/A3/A4 side by side on four key metrics, so the
-    # progressive-sophistication story (no scheduling -> arrival -> EDF
-    # -> RL) is visible in one glance.
-    try:
-        arms_order = [a for a in ("A1", "A2", "A3", "A4") if a in arms]
-        if len(arms_order) >= 2:
-            metric_panels = [
-                ("update_yield", "Update yield"),
-                ("round_close_rate_kminhalf", "Round close rate (k_min = N/2)"),
-                ("jains_fairness", "Jain's fairness"),
-                ("coverage", "Coverage"),
-            ]
-            fig, axes = plt.subplots(2, 2, figsize=(11, 8))
-            for ax, (metric, title) in zip(axes.flat, metric_panels):
-                data: List[List[float]] = []
-                labels: List[str] = []
-                for arm in arms_order:
-                    vals = [
-                        getattr(r, metric) for r in rows
-                        if r.is_ok and r.arm == arm
-                        and getattr(r, metric) is not None
-                    ]
-                    if vals:
-                        data.append(vals)
-                        labels.append(arm)
-                if data:
-                    ax.boxplot(
-                        data, labels=labels, showmeans=True,
-                        meanprops={"marker": "D", "markerfacecolor": "white",
-                                   "markeredgecolor": "black", "markersize": 6},
-                    )
-                ax.set_ylabel(title)
-                ax.set_title(title, fontsize=11)
-                ax.grid(True, axis="y", alpha=0.3)
-                _watermark(ax)
-            fig.suptitle(
-                "All arms — A1 (centralized FL) | A2 (arrival) | "
-                "A3 (EDF) | A4 (RL)",
-                fontsize=12, fontweight="bold",
+    # Figures 0a-0d — all-arms comparison, one figure per metric.
+    # Shows A1/A2/A3/A4 side by side so the progressive-sophistication
+    # story (no scheduling -> arrival -> EDF -> RL) is visible per
+    # metric. Split into separate files so each can be embedded
+    # independently in the paper at the size the figure caption needs.
+    arms_order = [a for a in ("A1", "A2", "A3", "A4") if a in arms]
+    metric_figs = [
+        ("fig0a", "update_yield", "Update yield"),
+        ("fig0b", "round_close_rate_kminhalf", "Round close rate (k_min = N/2)"),
+        ("fig0c", "jains_fairness", "Jain's fairness"),
+        ("fig0d", "coverage", "Coverage"),
+    ]
+    for fig_id, metric, title in metric_figs:
+        try:
+            if len(arms_order) < 2:
+                continue
+            data: List[List[float]] = []
+            labels: List[str] = []
+            for arm in arms_order:
+                vals = [
+                    getattr(r, metric) for r in rows
+                    if r.is_ok and r.arm == arm
+                    and getattr(r, metric) is not None
+                ]
+                if vals:
+                    data.append(vals)
+                    labels.append(arm)
+            if not data:
+                continue
+            fig, ax = plt.subplots(figsize=(6, 4))
+            ax.boxplot(
+                data, labels=labels, showmeans=True,
+                meanprops={"marker": "D", "markerfacecolor": "white",
+                           "markeredgecolor": "black", "markersize": 6},
             )
+            ax.set_ylabel(title)
+            ax.set_xlabel("Arm")
+            ax.set_title(f"All arms — {title}")
+            ax.grid(True, axis="y", alpha=0.3)
+            _watermark(ax)
             fig.tight_layout()
-            out = figures_dir / "exp3_fig0_all_arms.png"
+            out = figures_dir / f"exp3_{fig_id}_{metric}.png"
             fig.savefig(out, dpi=150, bbox_inches="tight")
             plt.close(fig)
             written.append(out)
-    except Exception as e:  # pragma: no cover
-        log.warning("fig0 (all-arms) skipped: %s", e)
+        except Exception as e:  # pragma: no cover
+            log.warning("%s (%s) skipped: %s", fig_id, metric, e)
 
-    # Mule-only propulsion-energy panel — A1 has none, so this lives as
-    # a sibling to fig0 rather than inside it. Three arms (A2/A3/A4)
-    # side-by-side on the energy ledger.
+    # Figure 0e — mule-only propulsion energy. A1 has no mule, so this
+    # is a separate three-arm comparison (A2/A3/A4) on the Eq. 5 cost
+    # ledger. Lives alongside the federation-metric figures because
+    # the energy trade-off is part of the same A4-vs-rest story.
     try:
         mule_arms = [a for a in ("A2", "A3", "A4") if a in arms]
         if len(mule_arms) >= 2:
-            fig, ax = plt.subplots(figsize=(7, 4))
+            fig, ax = plt.subplots(figsize=(6, 4))
             data: List[List[float]] = []
             labels: List[str] = []
             for arm in mule_arms:
@@ -364,16 +364,17 @@ def write_figures(
             if data:
                 ax.boxplot(data, labels=labels, showmeans=True)
             ax.set_ylabel("Propulsion energy per mission (J)")
+            ax.set_xlabel("Arm")
             ax.set_title("Mule arms — energy cost (Eq. 5)")
             ax.grid(True, axis="y", alpha=0.3)
             _watermark(ax)
             fig.tight_layout()
-            out = figures_dir / "exp3_fig0b_propulsion_energy.png"
+            out = figures_dir / "exp3_fig0e_propulsion_energy.png"
             fig.savefig(out, dpi=150, bbox_inches="tight")
             plt.close(fig)
             written.append(out)
     except Exception as e:  # pragma: no cover
-        log.warning("fig0b (propulsion energy) skipped: %s", e)
+        log.warning("fig0e (propulsion energy) skipped: %s", e)
 
     # 1 + 2 + 3 — paired tests CSV (three rows: A2vsA1, A3vsA2, A4vsA3).
     try:
