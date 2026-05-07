@@ -39,24 +39,39 @@ ARMS = ("A1", "A2", "A3", "A4")
 class Exp3Driver:
     """Owns the per-trial dispatch + the (optional) shared A4 selector.
 
-    ``upload_bytes_per_contact`` and ``nominal_upload_bps`` set the
-    sim's upload model. The defaults (10 MB at 1 Mbps) put genuine
-    pressure on A3's feasibility filter; legacy "calibration-free"
-    runs used 0 bytes and had a toothless filter, so the runner_main
-    CLI and any caller wanting paper-grade results should pass
-    realistic values.
+    The driver carries **separate** upload-model defaults for the
+    clean and jittery regimes so the two cells of the ``jittery``
+    sweep axis test materially different network conditions:
+
+    * **Clean regime** — minimal network pressure. Default 1 MB at
+      10 Mbps gives upload_s ≈ 0.8 s per contact, dwarfed by the 30 s
+      collect window, so A3's feasibility filter rarely fires and
+      the strategies are compared in a near-ideal scheduling regime.
+    * **Jittery regime** — heavy network pressure. Default 10 MB at
+      1 Mbps gives upload_s ≈ 80 s per contact, plus 2% packet loss
+      and 30% latency jitter (Exp.\ 1 ``--jittery`` parity). A3's
+      filter fires aggressively under this load.
+
+    The two regimes together span the operational envelope: clean
+    isolates the algorithmic question (does ranking matter when the
+    network is fine?), jittery isolates the operational question
+    (does the filter help under realistic FL-uplink stress?).
     """
 
     calibration: Optional[Exp3Calibration] = None
     selector_a4: Optional[TargetSelectorRL] = None
-    upload_bytes_per_contact: float = 1.0e7
-    nominal_upload_bps: float = 1.0e6
-    # Default jittery-mode parameters at the driver level. Per-cell
-    # overrides via ``cell.params['jittery']`` (bool) flip these to
-    # the Exp.\ 1 jittery values (2% loss, 30% latency jitter) for
-    # that cell. See ``runner_main.py``'s ``--jittery`` axis.
-    packet_loss_pct: float = 0.0
-    latency_jitter_pct: float = 0.0
+    # Clean-regime upload model (filter rarely needed).
+    clean_upload_bytes: float = 1.0e6     # 1 MB
+    clean_upload_bps: float = 1.0e7       # 10 Mbps
+    # Jittery-regime upload model (filter actively exercised).
+    jittery_upload_bytes: float = 1.0e7   # 10 MB
+    jittery_upload_bps: float = 1.0e6     # 1 Mbps
+    # Per-regime network noise — Exp.\ 1 ``--jittery`` parity values
+    # are the jittery defaults; clean defaults to none.
+    clean_packet_loss_pct: float = 0.0
+    clean_latency_jitter_pct: float = 0.0
+    jittery_packet_loss_pct: float = 2.0
+    jittery_latency_jitter_pct: float = 30.0
 
     def __post_init__(self) -> None:
         if self.calibration is None:
@@ -116,16 +131,22 @@ class Exp3Driver:
     def _run_mule(
         self, cell: Cell, params: Mapping[str, Any], arm: str,
     ) -> Exp3MetricSummary:
-        # Jittery cells flip the Exp.\ 1-parity noise on (2% packet
-        # loss + 30% latency jitter). Clean cells leave it at the
-        # driver default (typically 0).
+        # Each regime has its own upload model and network-noise
+        # values (see :class:`Exp3Driver` docstring). Clean cells
+        # operate in a near-ideal network where A3's filter is
+        # mostly idle; jittery cells operate under realistic FL-
+        # uplink stress where the filter fires aggressively.
         jittery = bool(params.get("jittery", False))
         if jittery:
-            packet_loss = max(self.packet_loss_pct, 2.0)
-            latency_jitter = max(self.latency_jitter_pct, 30.0)
+            upload_bytes = self.jittery_upload_bytes
+            upload_bps = self.jittery_upload_bps
+            packet_loss = self.jittery_packet_loss_pct
+            latency_jitter = self.jittery_latency_jitter_pct
         else:
-            packet_loss = self.packet_loss_pct
-            latency_jitter = self.latency_jitter_pct
+            upload_bytes = self.clean_upload_bytes
+            upload_bps = self.clean_upload_bps
+            packet_loss = self.clean_packet_loss_pct
+            latency_jitter = self.clean_latency_jitter_pct
 
         sim_cfg = Exp3SimConfig(
             n_devices=int(params.get("N", params.get("n_devices", 10))),
@@ -134,11 +155,10 @@ class Exp3Driver:
             rf_range_m=float(params.get("rrf", params.get("rf_range_m", 60.0))),
             mission_budget_s=float(params.get("mission_budget_s", 600.0)),
             upload_bytes_per_contact=float(
-                params.get("upload_bytes_per_contact",
-                           self.upload_bytes_per_contact)
+                params.get("upload_bytes_per_contact", upload_bytes)
             ),
             nominal_upload_bps=float(
-                params.get("nominal_upload_bps", self.nominal_upload_bps)
+                params.get("nominal_upload_bps", upload_bps)
             ),
             packet_loss_pct=packet_loss,
             latency_jitter_pct=latency_jitter,

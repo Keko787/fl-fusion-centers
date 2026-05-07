@@ -115,21 +115,40 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         ),
     )
     parser.add_argument(
-        "--upload-bytes", type=float, default=1.0e7,
+        "--clean-upload-bytes", type=float, default=1.0e6,
         help=(
-            "Bytes uploaded per contact. Default 10 MB matches a "
-            "typical FL gradient payload. Set to 0 to disable the "
-            "upload term (legacy 'calibration-free' mode used by the "
-            "first paper-draft sweep)."
+            "Per-contact upload payload in CLEAN cells. Default 1 MB "
+            "represents a small FL update; combined with --clean-"
+            "upload-bps this yields upload_s << collect_s, so A3's "
+            "feasibility filter rarely fires in clean cells."
         ),
     )
     parser.add_argument(
-        "--upload-bps", type=float, default=1.0e6,
+        "--clean-upload-bps", type=float, default=1.0e7,
         help=(
-            "Nominal upload rate in bits/sec at the BS. Default 1 Mbps "
-            "is a typical mule-edge link. The simulator scales this by "
-            "an inverse-distance falloff and ±20%% jitter so distant "
-            "contacts get worse rates than near-BS contacts."
+            "Nominal upload rate (bits/sec) in CLEAN cells. Default "
+            "10 Mbps is a healthy mule-edge link. Combined with the "
+            "1 MB default payload this gives upload_s ≈ 0.8 s per "
+            "contact — minimal network pressure."
+        ),
+    )
+    parser.add_argument(
+        "--jittery-upload-bytes", type=float, default=1.0e7,
+        help=(
+            "Per-contact upload payload in JITTERY cells. Default 10 MB "
+            "matches a typical FL gradient payload. Combined with "
+            "--jittery-upload-bps this yields upload_s ~ 80 s per "
+            "contact, putting genuine pressure on A3's filter."
+        ),
+    )
+    parser.add_argument(
+        "--jittery-upload-bps", type=float, default=1.0e6,
+        help=(
+            "Nominal upload rate (bits/sec) in JITTERY cells. Default "
+            "1 Mbps is a stressed mule-edge link. The simulator also "
+            "applies inverse-distance falloff and ±20%% rate jitter "
+            "on top, plus 2%% packet loss and 30%% latency jitter "
+            "(the Exp.\\ 1 ``--jittery`` parity)."
         ),
     )
     parser.add_argument("--timeout-s", type=float, default=300.0,
@@ -186,12 +205,19 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
 
     driver = Exp3Driver(
         selector_a4=selector_a4,
-        upload_bytes_per_contact=float(args.upload_bytes),
-        nominal_upload_bps=float(args.upload_bps),
+        clean_upload_bytes=float(args.clean_upload_bytes),
+        clean_upload_bps=float(args.clean_upload_bps),
+        jittery_upload_bytes=float(args.jittery_upload_bytes),
+        jittery_upload_bps=float(args.jittery_upload_bps),
     )
     log.info(
-        "upload model: %g bytes / contact at %g bps nominal",
-        args.upload_bytes, args.upload_bps,
+        "clean upload model: %g bytes / contact at %g bps",
+        args.clean_upload_bytes, args.clean_upload_bps,
+    )
+    log.info(
+        "jittery upload model: %g bytes / contact at %g bps "
+        "+ 2%% packet loss + 30%% latency jitter",
+        args.jittery_upload_bytes, args.jittery_upload_bps,
     )
     runner = TrialRunner(
         grid=grid,

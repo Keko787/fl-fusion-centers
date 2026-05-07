@@ -165,30 +165,32 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     parser.add_argument("--mission-budget-s", type=float, default=600.0)
     parser.add_argument("--cruise-speed-m-s", type=float, default=5.0)
     parser.add_argument(
-        "--upload-bytes", type=float, default=1.0e7,
-        help="Per-contact upload payload (default 10 MB).",
-    )
-    parser.add_argument(
-        "--upload-bps", type=float, default=1.0e6,
-        help="Nominal upload rate (default 1 Mbps).",
-    )
-    parser.add_argument(
         "--jittery", action="store_true",
         help=(
-            "Activate Exp.\\ 1-parity network-link noise: 2%% packet "
-            "loss + 30%% latency jitter on every per-device "
-            "transmission and per-step duration. Off by default."
+            "Audit the JITTERY regime: 10 MB at 1 Mbps upload + 2%% "
+            "packet loss + 30%% latency jitter. Off (clean) by "
+            "default: 1 MB at 10 Mbps upload, no packet loss, no "
+            "latency jitter — A3's filter rarely fires here."
         ),
     )
     parser.add_argument(
-        "--packet-loss-pct", type=float, default=0.0,
-        help="Override the per-device packet-loss percentage. "
-             "Ignored if --jittery is on (which forces 2%%).",
+        "--upload-bytes", type=float, default=None,
+        help="Override per-contact upload payload. Defaults: 1 MB "
+             "in clean mode, 10 MB with --jittery.",
     )
     parser.add_argument(
-        "--latency-jitter-pct", type=float, default=0.0,
-        help="Override the per-step latency-jitter percentage. "
-             "Ignored if --jittery is on (which forces 30%%).",
+        "--upload-bps", type=float, default=None,
+        help="Override nominal upload rate. Defaults: 10 Mbps in "
+             "clean mode, 1 Mbps with --jittery.",
+    )
+    parser.add_argument(
+        "--packet-loss-pct", type=float, default=None,
+        help="Override packet loss. Defaults: 0%% clean, 2%% jittery.",
+    )
+    parser.add_argument(
+        "--latency-jitter-pct", type=float, default=None,
+        help="Override latency jitter. Defaults: 0%% clean, "
+             "30%% jittery.",
     )
     parser.add_argument(
         "--verbose", action="store_true",
@@ -213,6 +215,21 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         a4_selector = TargetSelectorRL(ddqn=ddqn, epsilon=0.0)
         log.info("loaded A4 selector weights from %s", args.selector_weights)
 
+    # Compute regime-specific upload defaults *once* before building
+    # arms — A3's FeasibilityModel uses the same upload model the
+    # sim will apply at step time, otherwise its feasibility math
+    # would use stale (zero-cost) numbers.
+    if args.jittery:
+        a3_upload_bytes = 1.0e7
+        a3_upload_bps = 1.0e6
+    else:
+        a3_upload_bytes = 1.0e6
+        a3_upload_bps = 1.0e7
+    if args.upload_bytes is not None:
+        a3_upload_bytes = float(args.upload_bytes)
+    if args.upload_bps is not None:
+        a3_upload_bps = float(args.upload_bps)
+
     arms = [
         ("A2", ArrivalOrderPolicy(), False),
         (
@@ -220,8 +237,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             EdfFeasibilityPolicy(model=FeasibilityModel(
                 cruise_speed_m_s=args.cruise_speed_m_s,
                 session_time_s=30.0,
-                upload_bytes_per_contact=args.upload_bytes,
-                nominal_upload_bps=args.upload_bps,
+                upload_bytes_per_contact=a3_upload_bytes,
+                nominal_upload_bps=a3_upload_bps,
                 default_mission_budget_s=args.mission_budget_s * args.beta,
             )),
             True,  # track filter drops
@@ -235,13 +252,24 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
 
     # Run paired seeds.
     for seed_idx in range(args.seeds):
-        # Jittery mode forces Exp.\ 1-parity noise (2% loss, 30% jit).
-        # Otherwise honour explicit overrides.
+        # Regime-specific defaults; overrides on the CLI win.
         if args.jittery:
+            upload_bytes = 1.0e7   # 10 MB
+            upload_bps = 1.0e6     # 1 Mbps
             packet_loss = 2.0
             latency_jitter = 30.0
         else:
+            upload_bytes = 1.0e6   # 1 MB
+            upload_bps = 1.0e7     # 10 Mbps
+            packet_loss = 0.0
+            latency_jitter = 0.0
+        if args.upload_bytes is not None:
+            upload_bytes = float(args.upload_bytes)
+        if args.upload_bps is not None:
+            upload_bps = float(args.upload_bps)
+        if args.packet_loss_pct is not None:
             packet_loss = float(args.packet_loss_pct)
+        if args.latency_jitter_pct is not None:
             latency_jitter = float(args.latency_jitter_pct)
         cfg = Exp3SimConfig(
             n_devices=args.n_devices,
@@ -249,8 +277,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             rf_range_m=args.rrf,
             mission_budget_s=args.mission_budget_s,
             cruise_speed_m_s=args.cruise_speed_m_s,
-            upload_bytes_per_contact=args.upload_bytes,
-            nominal_upload_bps=args.upload_bps,
+            upload_bytes_per_contact=upload_bytes,
+            nominal_upload_bps=upload_bps,
             packet_loss_pct=packet_loss,
             latency_jitter_pct=latency_jitter,
             seed=1000 + seed_idx,
