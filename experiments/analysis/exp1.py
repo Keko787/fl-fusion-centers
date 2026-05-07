@@ -465,7 +465,7 @@ def write_figures(
         Dpd_order = sorted({r.Dpd for r in rows if r.is_ok}, key=lambda s: _parse_size(s))
         alpha_order = sorted({r.alpha for r in rows if r.is_ok})
         if len(Dpd_order) >= 1 and len(alpha_order) >= 1:
-            fig, axes = plt.subplots(1, 2, figsize=(10, 3.5), sharey=True)
+            fig, axes = plt.subplots(1, 2, figsize=(11.5, 4.2), sharey=True)
             for ax, arm in zip(axes, ("FL", "Centralized")):
                 arm_rows = [r for r in rows if r.is_ok and r.arm == arm]
                 mat = np.full((len(alpha_order), len(Dpd_order)), np.nan)
@@ -476,16 +476,43 @@ def write_figures(
                             mat[i, j] = np.mean([r.Pcomplete for r in cell])
                 im = ax.imshow(mat, aspect="auto", origin="lower",
                                cmap="RdYlGn", vmin=0.0, vmax=1.0)
+                # Annotate each cell with the Pcomplete value in
+                # a contrasting colour so red and green cells stay
+                # legible.
+                for i in range(len(alpha_order)):
+                    for j in range(len(Dpd_order)):
+                        v = mat[i, j]
+                        if np.isnan(v):
+                            continue
+                        ax.text(
+                            j, i, f"{v:.2f}",
+                            ha="center", va="center",
+                            fontsize=11, fontweight="bold",
+                            color="white" if v < 0.35 or v > 0.65 else "black",
+                        )
+                # Thick white vertical separators between Dpd columns
+                # to make it visually obvious these are distinct
+                # experimental conditions (different per-device data
+                # shard sizes), not a continuous axis.
+                for sep in range(1, len(Dpd_order)):
+                    ax.axvline(sep - 0.5, color="white",
+                                linewidth=4.5, zorder=3)
                 ax.set_xticks(range(len(Dpd_order)))
-                ax.set_xticklabels(Dpd_order)
+                ax.set_xticklabels(Dpd_order, fontsize=11)
                 ax.set_yticks(range(len(alpha_order)))
                 ax.set_yticklabels([f"{a:.1f}" for a in alpha_order])
-                ax.set_xlabel("|D|_pd")
-                ax.set_title(arm)
+                ax.set_xlabel(
+                    r"$|D|_{pd}$  (per-device data shard size)",
+                    fontsize=11,
+                )
+                ax.set_title(arm, fontsize=12, fontweight="bold")
                 _watermark(ax)
-            axes[0].set_ylabel("α (deadline multiplier)")
-            fig.suptitle("P_complete heatmap")
-            fig.colorbar(im, ax=axes, fraction=0.04)
+            axes[0].set_ylabel(r"$\alpha$  (deadline multiplier)",
+                                fontsize=11)
+            fig.colorbar(
+                im, ax=axes, fraction=0.04,
+                label=r"$P_{complete}$  (fraction of trials meeting deadline)",
+            )
             out = figures_dir / "exp1_Pcomplete_heatmap.png"
             fig.savefig(out, dpi=150, bbox_inches="tight")
             plt.close(fig)

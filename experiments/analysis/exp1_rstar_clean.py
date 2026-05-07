@@ -161,6 +161,130 @@ def _plot_residuals(per_cell, out_path: Path) -> None:
     print(f"wrote {out_path}")
 
 
+def _plot_with_cell_data(per_cell, per_dpd, Dpds, Rs, cent_mean, out_path):
+    """Combined view: 18 raw cell means as markers + 2 trend lines.
+
+    Each (Dpd, alpha) cell is drawn at a deterministic horizontal
+    offset around its R value so all six co-located markers fan out
+    visibly instead of stacking on top of each other (the cells differ
+    by < 0.05 s at this y-scale, which is sub-pixel). The fan order
+    reflects the schema:
+      - colour = Dpd  (10MB blue, 100MB orange)
+      - shape  = alpha  (circle 0.5, square 1.0, triangle 2.0)
+      - x-offset = (Dpd group, alpha within group)
+
+    A side-panel inset shows the un-offset numerical values so a reader
+    who wants the actual T_proc per cell does not have to read offsets
+    off the x-axis.
+    """
+    fig = plt.figure(figsize=(11.5, 5.6))
+    gs = fig.add_gridspec(1, 5, wspace=0.05)
+    ax = fig.add_subplot(gs[0, :4])
+    ax_tab = fig.add_subplot(gs[0, 4])
+    ax_tab.axis("off")
+
+    Dpd_color = {"10MB": "#2b6cb0", "100MB": "#d97706"}
+    alphas = sorted({a for (_, a, _) in per_cell})
+    alpha_marker = {alphas[0]: "o", alphas[1]: "s", alphas[2]: "^"}
+
+    # x-offset per (Dpd index, alpha index). Fan layout: 10MB cluster
+    # left of the R tick, 100MB cluster right.
+    cluster_half_width = 1.6
+    intra_step = 0.5
+    def _x_offset(Dpd: str, alpha: float) -> float:
+        d_sign = -1.0 if Dpds.index(Dpd) == 0 else 1.0
+        a_idx = alphas.index(alpha)
+        a_off = (a_idx - (len(alphas) - 1) / 2.0) * intra_step
+        return d_sign * cluster_half_width + a_off * d_sign * 0.0 + a_off
+
+    for (Dpd, alpha, R), v in per_cell.items():
+        ax.scatter(
+            R + _x_offset(Dpd, alpha), v,
+            color=Dpd_color.get(Dpd, "grey"),
+            marker=alpha_marker.get(alpha, "x"),
+            s=110, edgecolor="white", linewidth=0.8,
+            zorder=4,
+        )
+
+    for Dpd in Dpds:
+        ys = [per_dpd[(Dpd, R)] for R in Rs]
+        ax.plot(Rs, ys, color=Dpd_color.get(Dpd, "grey"),
+                 linewidth=2.2, alpha=0.85, zorder=2,
+                 label=f"trend, Dpd = {Dpd}")
+
+    ax.axhline(cent_mean, linestyle="--", color="black", linewidth=1.4,
+                zorder=1, label=f"Centralized baseline = {cent_mean:.2f} s")
+
+    slope = (per_dpd[(Dpds[0], Rs[-1])] - per_dpd[(Dpds[0], Rs[0])]) / (Rs[-1] - Rs[0])
+    R_star_proj = cent_mean / slope if slope > 0 else float("nan")
+    ax.axvline(R_star_proj, linestyle=":", color="#666666",
+                linewidth=1.4, zorder=1)
+    ax.annotate(
+        f"projected R* = {R_star_proj:.1f}\nslope = {slope:.3f} s/round",
+        xy=(R_star_proj, cent_mean * 0.45),
+        xytext=(-12, 0), textcoords="offset points",
+        ha="right", va="center", fontsize=10, color="#444444",
+        bbox=dict(facecolor="white", edgecolor="#999999",
+                   boxstyle="round,pad=0.4", linewidth=1.0),
+    )
+
+    from matplotlib.lines import Line2D
+    handles = [
+        Line2D([0], [0], color=Dpd_color[Dpds[0]], linewidth=2.2,
+                label=f"trend, Dpd = {Dpds[0]} (mean over alpha)"),
+        Line2D([0], [0], color=Dpd_color[Dpds[1]], linewidth=2.2,
+                label=f"trend, Dpd = {Dpds[1]} (mean over alpha)"),
+        Line2D([0], [0], color="black", linestyle="--", linewidth=1.4,
+                label=f"Centralized baseline = {cent_mean:.2f} s"),
+    ]
+    handles += [
+        Line2D([0], [0], marker=alpha_marker[a], color="grey",
+                markerfacecolor="grey", markersize=10,
+                markeredgecolor="white", linewidth=0,
+                label=f"alpha = {a:g}")
+        for a in alphas
+    ]
+    ax.legend(handles=handles, loc="upper left",
+               bbox_to_anchor=(0.01, 0.99), fontsize=9,
+               framealpha=0.92, ncol=1)
+
+    ax.set_xlabel("R (FL rounds)", fontsize=11)
+    ax.set_ylabel(r"$T_{proc}$ (s)", fontsize=11)
+    ax.grid(alpha=0.3)
+    ax.set_xlim(min(Rs) - 4, max(R_star_proj + 4, max(Rs) + 4))
+    ax.set_ylim(0, max(cent_mean * 1.18, max(per_dpd.values()) * 1.10))
+
+    # Side-panel CSV-as-table.
+    ax_tab.set_title("per-cell means (s)", fontsize=10, loc="left")
+    cell_rows = sorted(
+        per_cell.items(),
+        key=lambda kv: (_parse_size(kv[0][0]), kv[0][1], kv[0][2]),
+    )
+    table_data = [["Dpd", "alpha", "R", "Tproc"]]
+    for (Dpd, alpha, R), v in cell_rows:
+        table_data.append([Dpd, f"{alpha:g}", str(R), f"{v:.2f}"])
+    tbl = ax_tab.table(
+        cellText=table_data[1:], colLabels=table_data[0],
+        loc="center", cellLoc="center",
+        colWidths=[0.30, 0.20, 0.20, 0.30],
+    )
+    tbl.auto_set_font_size(False)
+    tbl.set_fontsize(8)
+    tbl.scale(1.0, 1.15)
+    # Colour-band the table rows by Dpd so the colour mapping carries
+    # over from the scatter to the table.
+    for i, (Dpd, _alpha, _R) in enumerate([row[0] for row in cell_rows]):
+        for col in range(4):
+            tbl[(i + 1, col)].set_facecolor(
+                "#e6effa" if Dpd == Dpds[0] else "#fdf2e0"
+            )
+
+    fig.tight_layout()
+    fig.savefig(out_path, dpi=150, bbox_inches="tight")
+    plt.close(fig)
+    print(f"wrote {out_path}")
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     ap = argparse.ArgumentParser(prog="experiments.analysis.exp1_rstar_clean")
     ap.add_argument("--csv", required=True, type=Path)
@@ -178,6 +302,8 @@ def main(argv: Sequence[str] | None = None) -> int:
                 args.out_dir / "exp1_Rstar_regression_clean.png")
     _plot_residuals(per_cell,
                      args.out_dir / "exp1_Rstar_residuals.png")
+    _plot_with_cell_data(per_cell, per_dpd, Dpds, Rs, cent_mean,
+                          args.out_dir / "exp1_Rstar_with_data.png")
     return 0
 
 
