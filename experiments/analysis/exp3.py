@@ -347,17 +347,23 @@ def write_figures(
             if labels and labels[0] == "A1" and len(labels) > 1:
                 ax.axvline(x=1.5, color="#888888", linestyle="--",
                            linewidth=1.4, alpha=0.85, zorder=0)
+                # Extend the y-axis upward so the region labels sit in
+                # fresh whitespace instead of crashing into A1's high
+                # outliers. 18% headroom is enough that label boxes
+                # sit comfortably above the topmost data point.
                 ymin, ymax = ax.get_ylim()
-                yspan = ymax - ymin
-                # Region labels just below the top of the plot.
+                yspan_orig = ymax - ymin
+                ax.set_ylim(ymin, ymax + 0.18 * yspan_orig)
+                ymin, ymax = ax.get_ylim()
+                label_y = ymin + 0.97 * (ymax - ymin)
                 ax.text(
-                    1.0, ymin + 0.96 * yspan,
+                    1.0, label_y,
                     "Centralized FL\n(upper bound)",
                     ha="center", va="top", fontsize=8.5,
                     style="italic", color="#444444",
                 )
                 ax.text(
-                    (len(labels) + 2) / 2.0, ymin + 0.96 * yspan,
+                    (len(labels) + 2) / 2.0, label_y,
                     "Mule relay-FL ablation",
                     ha="center", va="top", fontsize=8.5,
                     style="italic", color="#444444",
@@ -590,25 +596,30 @@ def write_figures(
             # of the chart and constitute the relay-FL scheduling
             # ablation. Text annotations make this distinction explicit
             # on the figure itself rather than only in the caption.
+            # A1 annotation: lowered from y=0.96 to y=0.88 so it sits
+            # below the A1 N=20 line peak instead of overlapping it.
             ax.text(
-                0.97, 0.96,
+                0.97, 0.88,
                 "A1: centralized FL\n(upper-bound control,\nno mule constraint)",
                 transform=ax.transAxes,
                 ha="right", va="top", fontsize=8.5,
                 style="italic", color="tab:blue",
                 bbox=dict(boxstyle="round,pad=0.35",
                           facecolor="white", edgecolor="tab:blue",
-                          alpha=0.85, linewidth=0.8),
+                          alpha=0.9, linewidth=0.8),
             )
+            # A2/A3/A4 annotation: raised from y=0.30 to y=0.42 so it
+            # sits in the gap between A1's N=5 line (low) and the
+            # bucket-size legend (mid-right) without crossing data lines.
             ax.text(
-                0.97, 0.30,
+                0.97, 0.42,
                 "A2 / A3 / A4:\nmule relay-FL\nscheduling ablation",
                 transform=ax.transAxes,
                 ha="right", va="top", fontsize=8.5,
                 style="italic", color="#444444",
                 bbox=dict(boxstyle="round,pad=0.35",
                           facecolor="white", edgecolor="#888888",
-                          alpha=0.85, linewidth=0.8),
+                          alpha=0.9, linewidth=0.8),
             )
             _watermark(ax)
             fig.tight_layout()
