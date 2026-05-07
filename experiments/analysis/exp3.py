@@ -518,12 +518,17 @@ def write_figures(
         log.warning("fig3 skipped: %s", e)
 
     # Figure 4 — β-sweep, all N values overlaid on one panel.
-    # Color encodes arm; line style + marker encode N. Two legends so
-    # the reader can decode either dimension independently.
+    # Mule-arm ablation only (A1 omitted): A1 is the centralized-FL
+    # upper bound and is shown alongside A2/A3/A4 in fig0a; including
+    # it here would dominate the y-axis and obscure the finer
+    # scheduling-strategy comparison among A2/A3/A4. fig0a already
+    # establishes the upper-bound magnitude; this figure focuses on the
+    # mule-arm scheduling ablation.
     try:
         Ns = sorted({r.N for r in rows if r.is_ok})
         if Ns and arms:
             # Stable color per arm so identity carries across figures.
+            # A1 entry retained for future re-inclusion if needed.
             arm_colors = {
                 "A1": "tab:blue", "A2": "tab:orange",
                 "A3": "tab:green", "A4": "tab:red",
@@ -534,7 +539,7 @@ def write_figures(
             n_markers = ["o", "s", "^"]
 
             fig, ax = plt.subplots(figsize=(7.5, 5))
-            arms_in_data = [a for a in ("A1", "A2", "A3", "A4") if a in arms]
+            arms_in_data = [a for a in ("A2", "A3", "A4") if a in arms]
             for arm in arms_in_data:
                 color = arm_colors.get(arm, "black")
                 for i, N in enumerate(Ns):
@@ -579,14 +584,13 @@ def write_figures(
                 loc="upper left", fontsize=9, title_fontsize=9,
             )
             ax.add_artist(arm_legend)
-            # Nudge the bucket-size legend down from the upper-right
-            # corner so it sits in the empty band between A1's high
-            # values and the mule arms' low values, leaving the A1
-            # N=20 line readable at the top-right.
+            # With A1 omitted from this figure the data sits in the
+            # 0.8 – 2.2 yield range, so the bucket-size legend can
+            # return to the natural upper-right corner without
+            # crossing any line.
             ax.legend(
                 handles=n_handles, title="Bucket size",
-                loc="upper right", bbox_to_anchor=(1.0, 0.78),
-                fontsize=9, title_fontsize=9,
+                loc="upper right", fontsize=9, title_fontsize=9,
             )
             # Annotate the two distinct regimes the chart contains. A1
             # (blue) is a centralized-FL upper bound — its yield reflects
@@ -596,31 +600,6 @@ def write_figures(
             # of the chart and constitute the relay-FL scheduling
             # ablation. Text annotations make this distinction explicit
             # on the figure itself rather than only in the caption.
-            # A1 annotation: lowered from y=0.96 to y=0.88 so it sits
-            # below the A1 N=20 line peak instead of overlapping it.
-            ax.text(
-                0.97, 0.88,
-                "A1: centralized FL\n(upper-bound control,\nno mule constraint)",
-                transform=ax.transAxes,
-                ha="right", va="top", fontsize=8.5,
-                style="italic", color="tab:blue",
-                bbox=dict(boxstyle="round,pad=0.35",
-                          facecolor="white", edgecolor="tab:blue",
-                          alpha=0.9, linewidth=0.8),
-            )
-            # A2/A3/A4 annotation: raised from y=0.30 to y=0.42 so it
-            # sits in the gap between A1's N=5 line (low) and the
-            # bucket-size legend (mid-right) without crossing data lines.
-            ax.text(
-                0.97, 0.42,
-                "A2 / A3 / A4:\nmule relay-FL\nscheduling ablation",
-                transform=ax.transAxes,
-                ha="right", va="top", fontsize=8.5,
-                style="italic", color="#444444",
-                bbox=dict(boxstyle="round,pad=0.35",
-                          facecolor="white", edgecolor="#888888",
-                          alpha=0.9, linewidth=0.8),
-            )
             _watermark(ax)
             fig.tight_layout()
             out = figures_dir / "exp3_fig4_beta_sweep.png"
@@ -774,19 +753,23 @@ _LATEX_CAPTIONS: tuple = (
     (
         "exp3_fig4_beta_sweep",
         "fig:exp3:beta_sweep",
-        "Update yield versus deadline tightness, across arms and bucket sizes",
+        "Mule-arm update yield versus deadline tightness, across bucket sizes",
         (
-            r"\textbf{Update yield versus deadline tightness $\beta$}, "
-            r"with bucket size $N$ encoded by line style "
+            r"\textbf{Mule-arm update yield versus deadline tightness "
+            r"$\beta$}, with bucket size $N$ encoded by line style "
             r"(solid: $N=5$; dashed: $N=10$; dotted: $N=20$) and arm "
-            r"encoded by colour. A1 (centralized FL) scales with both "
-            r"$N$ and $\beta$ but saturates at $\beta \geq 1.0$, "
-            r"indicating that once deadlines admit the full sampled "
-            r"client set, additional slack provides no further gain. "
-            r"The mule arms (A2/A3/A4) scale with $N$ but are "
-            r"insensitive to $\beta$ at every $N$, isolating mule "
-            r"travel time as the binding constraint on "
-            r"contacts-per-mission."
+            r"encoded by colour. The centralized-FL upper bound (A1) "
+            r"is omitted from this figure to bring the y-axis to a "
+            r"scale where the mule-arm comparison is legible; the "
+            r"upper-bound magnitude is established in "
+            r"Fig.~\ref{fig:exp3:update_yield}. The three mule arms "
+            r"(A2/A3/A4) overlap at every $(N, \beta)$ cell, scaling "
+            r"with bucket size but insensitive to deadline slack. "
+            r"This $\beta$-insensitivity isolates mule travel time as "
+            r"the binding constraint on contacts-per-mission: "
+            r"additional deadline slack provides no measurable gain "
+            r"once the mule has exhausted its mission budget on "
+            r"transit between contacts."
         ),
     ),
 )
