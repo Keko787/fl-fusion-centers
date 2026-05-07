@@ -751,23 +751,22 @@ def write_figures(
                        label=f"N = {N}")
                 for i, N in enumerate(Ns)
             ]
-            # With A1 omitted, the mule-arm lines cluster at three
-            # discrete yield bands: ≈ 1.0 (N=5 solid), ≈ 1.4
-            # (N=10 dashed), ≈ 2.0 (N=20 dotted). Park the Arm legend
-            # in the empty band between the N=10 and N=20 lines (data
-            # y ≈ 1.4 – 2.0, which corresponds to axes-fraction ≈
-            # 0.4 – 0.8 once the y-axis auto-scales). Anchoring at
-            # axes-fraction 0.6 with vertical centring puts the
-            # legend's middle near data y ≈ 1.7.
+            # Group both legends in the upper-right corner: Arm on
+            # top, Bucket size stacked just below it. With A1 omitted
+            # the mule-arm lines top out around y ≈ 2.2 (axes-fraction
+            # ≈ 0.85), leaving the upper 15% of the y-axis empty for
+            # the legend stack. Anchoring Bucket size at y=0.65 leaves
+            # ~35% of axes-height for the Arm legend above it.
             arm_legend = ax.legend(
                 handles=arm_handles, title="Arm",
-                loc="center left", bbox_to_anchor=(0.02, 0.6),
+                loc="upper right",
                 fontsize=9, title_fontsize=9,
             )
             ax.add_artist(arm_legend)
             ax.legend(
                 handles=n_handles, title="Bucket size",
-                loc="upper right", fontsize=9, title_fontsize=9,
+                loc="upper right", bbox_to_anchor=(1.0, 0.65),
+                fontsize=9, title_fontsize=9,
             )
             # Annotate the two distinct regimes the chart contains. A1
             # (blue) is a centralized-FL upper bound — its yield reflects
