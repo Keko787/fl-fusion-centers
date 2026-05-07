@@ -549,9 +549,14 @@ def write_figures(
                 loc="upper left", fontsize=9, title_fontsize=9,
             )
             ax.add_artist(arm_legend)
+            # Nudge the bucket-size legend down from the upper-right
+            # corner so it sits in the empty band between A1's high
+            # values and the mule arms' low values, leaving the A1
+            # N=20 line readable at the top-right.
             ax.legend(
                 handles=n_handles, title="Bucket size",
-                loc="upper right", fontsize=9, title_fontsize=9,
+                loc="upper right", bbox_to_anchor=(1.0, 0.78),
+                fontsize=9, title_fontsize=9,
             )
             _watermark(ax)
             fig.tight_layout()
