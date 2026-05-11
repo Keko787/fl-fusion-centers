@@ -17,7 +17,26 @@ from typing import Iterable
 import joblib
 import numpy as np
 import pandas as pd
+from sklearn.impute import SimpleImputer
+from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import MinMaxScaler, StandardScaler
+
+
+def _make_pipeline(scaler_cls) -> Pipeline:
+    """Imputer → scaler.
+
+    Median imputation handles the ~85%-missing LEMAS police-staffing
+    columns + the long tail of single-row NaNs that real UCI Communities
+    and Crime data ships with. Without this step every loss is NaN from
+    epoch 1: ``?`` → NaN in the loader, NaN propagates through the
+    StandardScaler unchanged, and the first forward pass blows up.
+    Median (rather than mean) keeps the imputed value robust to the
+    heavy-tailed crime-rate distributions.
+    """
+    return Pipeline(steps=[
+        ("impute", SimpleImputer(strategy="median")),
+        ("scale", scaler_cls()),
+    ])
 
 
 def preprocess_communities_crime(client_train_df: pd.DataFrame,
@@ -65,8 +84,16 @@ def preprocess_communities_crime(client_train_df: pd.DataFrame,
 
     if scaler_path is not None and Path(scaler_path).exists():
         scaler = joblib.load(scaler_path)
+        # Defensive: an old scaler.joblib from a pre-imputation run will
+        # be a bare StandardScaler/MinMaxScaler, not a Pipeline. Detect
+        # that and refit so the imputation step is restored. Otherwise
+        # NaN inputs would propagate through training again.
+        if not isinstance(scaler, Pipeline):
+            scaler = _make_pipeline(scaler_cls).fit(X_train_df.to_numpy())
+            Path(scaler_path).parent.mkdir(parents=True, exist_ok=True)
+            joblib.dump(scaler, scaler_path)
     else:
-        scaler = scaler_cls().fit(X_train_df.to_numpy())
+        scaler = _make_pipeline(scaler_cls).fit(X_train_df.to_numpy())
         if scaler_path is not None:
             Path(scaler_path).parent.mkdir(parents=True, exist_ok=True)
             joblib.dump(scaler, scaler_path)
@@ -87,10 +114,17 @@ def preprocess_communities_crime(client_train_df: pd.DataFrame,
 
 
 def _scaler_for_mode(mode: str):
+    """Returns an unfit imputer→scaler Pipeline for the given mode.
+
+    Name kept for backwards compatibility with callers that imported it
+    before Phase E.6 added the SimpleImputer step. The persisted joblib
+    is now a Pipeline; older bare-StandardScaler files are auto-refit
+    in :func:`preprocess_communities_crime`.
+    """
     if mode == "COMMCRIME":
-        return StandardScaler()
+        return _make_pipeline(StandardScaler)
     if mode == "COMMCRIME-MM":
-        return MinMaxScaler()
+        return _make_pipeline(MinMaxScaler)
     raise ValueError(f"Unknown COMMCRIME preprocessing mode: {mode!r}")
 
 
@@ -129,11 +163,14 @@ def fit_global_scaler(client_train_dfs: Iterable[pd.DataFrame],
                  if c in union.columns]
     feature_df = union.drop(columns=drop_cols)
 
-    scaler = _scaler_for_mode(mode).fit(feature_df.to_numpy())
+    pipeline = _scaler_for_mode(mode).fit(feature_df.to_numpy())
 
     scaler_path = Path(run_dir) / "scaler.joblib"
     scaler_path.parent.mkdir(parents=True, exist_ok=True)
-    joblib.dump(scaler, scaler_path)
-    print(f"=== fit_global_scaler: {type(scaler).__name__} fit on "
-          f"{len(feature_df)} rows × {feature_df.shape[1]} features → {scaler_path}")
+    joblib.dump(pipeline, scaler_path)
+    # Describe the inner scaler in the log line so the message stays
+    # informative now that the persisted artifact is a Pipeline.
+    inner_name = type(pipeline.named_steps["scale"]).__name__
+    print(f"=== fit_global_scaler: {inner_name} (with median imputation) fit on "
+          f"{len(feature_df)} rows x {feature_df.shape[1]} features -> {scaler_path}")
     return scaler_path

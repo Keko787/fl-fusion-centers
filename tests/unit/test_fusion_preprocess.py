@@ -100,8 +100,15 @@ def test_scaler_persisted_and_reused(split):
     # Replace the scaler file with one whose mean is artificially shifted;
     # if the preprocessor refits, the shift gets overwritten.
     original = joblib.load(scaler_path)
-    # Sanity: original is one of the two scaler types
-    assert isinstance(original, (StandardScaler, MinMaxScaler))
+    # Persisted artifact is now an imputer→scaler Pipeline (Phase E.6
+    # NaN-handling fix). Allow either the bare scaler or the Pipeline
+    # wrapping it, and assert on the inner type either way.
+    from sklearn.pipeline import Pipeline
+    if isinstance(original, Pipeline):
+        inner = original.named_steps["scale"]
+        assert isinstance(inner, (StandardScaler, MinMaxScaler))
+    else:
+        assert isinstance(original, (StandardScaler, MinMaxScaler))
     X2, _, _, _, _, _ = preprocess_communities_crime(
         train, val, gt, mode="COMMCRIME", scaler_path=str(scaler_path),
     )
@@ -112,6 +119,43 @@ def test_unknown_mode_raises(split):
     train, val, gt, _ = split
     with pytest.raises(ValueError, match="Unknown COMMCRIME preprocessing mode"):
         preprocess_communities_crime(train, val, gt, mode="WAT")
+
+
+def test_preprocess_imputes_nan_inputs(split):
+    """Phase E.6 regression test for the real-data shakedown.
+
+    The UCI Communities and Crime LEMAS columns are ~85% NaN. Before
+    the median-imputation fix, NaN propagated through the StandardScaler
+    untouched and the first forward pass produced NaN loss for every
+    epoch (training was running but learning nothing). Pin that the
+    preprocessor scrubs NaN out of the feature matrix end-to-end.
+    """
+    train, val, gt, tmp_path = split
+
+    # Inject NaN into ~half the rows in a couple of feature columns.
+    feature_cols = [c for c in train.columns
+                    if c not in ("State", "threat_class", "escalation_score")]
+    poison_cols = feature_cols[:3]
+    rng = np.random.default_rng(0)
+    for col in poison_cols:
+        mask = rng.random(len(train)) < 0.5
+        train.loc[mask, col] = np.nan
+        # Also poison val/test so we cover transform-side NaN.
+        vmask = rng.random(len(val)) < 0.5
+        val.loc[vmask, col] = np.nan
+        gmask = rng.random(len(gt)) < 0.5
+        gt.loc[gmask, col] = np.nan
+
+    assert train[poison_cols].isna().any().any(), "fixture sanity check"
+
+    X_train, X_val, _, _, X_test, _ = preprocess_communities_crime(
+        train, val, gt, mode="COMMCRIME",
+        scaler_path=str(tmp_path / "scaler.joblib"),
+    )
+
+    assert not np.isnan(X_train).any(), "NaN leaked through into X_train"
+    assert not np.isnan(X_val).any(), "NaN leaked through into X_val"
+    assert not np.isnan(X_test).any(), "NaN leaked through into X_test"
 
 
 def test_state_column_excluded_from_features(split):
