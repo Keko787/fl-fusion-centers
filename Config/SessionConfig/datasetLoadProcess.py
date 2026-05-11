@@ -2,7 +2,7 @@ from Config.DatasetConfig.CICIOT2023_Sampling.ciciot2023DatasetLoadV2 import (lo
 from Config.DatasetConfig.IOTBotNet2020_Sampling.iotbotnet2020DatasetLoad import loadIOTBOTNET
 from Config.DatasetConfig.IoT_Handling.IotDatasetLoadProcess import load_and_preprocess_data, feature_selection, prepare_data, prepare_data_min_max
 from Config.DatasetConfig.LiveData_Handling.loadLiveData import loadLiveCaptureData
-from Config.DatasetConfig.Dataset_Preprocessing.datasetPreprocess import preprocess_dataset, preprocess_AC_dataset, preprocess_live_dataset
+from Config.DatasetConfig.Dataset_Preprocessing.datasetPreprocess import preprocess_dataset, preprocess_AC_dataset, preprocess_live_dataset, preprocess_communities_crime
 # from Config.DatasetConfig.vehicleCAN.filename import functionname
 
 # --- Load Data ---#
@@ -80,6 +80,20 @@ def datasetLoadProcess(args):
         # Load Live Packet Capture Data
         live_data, irrelevant_features_live = loadLiveCaptureData()
 
+    elif dataset_used == "COMMCRIME":
+        # Fusion-centers data path (Phase A.5 / design doc §3.2). The
+        # implementation lives in the COMMCRIME package so it can be
+        # imported by tests without the legacy flwr/tf stack.
+        from Config.DatasetConfig.CommunitiesCrime_Sampling.commCrimeLoadProcess import (
+            load_commcrime,
+        )
+        return load_commcrime(args)
+
+    elif dataset_used == "NIBRS":
+        raise NotImplementedError(
+            "NIBRS loader is reserved (design doc §8.2); not yet implemented."
+        )
+
     # --- 2 PREPROCESS DATASET ---#
     if dataset_preprocessing == "Default":
         X_train_data, X_val_data, y_train_data, y_val_data, X_test_data, y_test_data = preprocess_dataset(
@@ -118,3 +132,5 @@ def datasetLoadProcess(args):
         return X_train, X_val, X_test, y_train, y_val, y_test
 
     # elif dataset_preprocessing == "CANGAN":
+
+

@@ -39,6 +39,7 @@ from Config.ModelTrainingConfig.ClientModelTrainingConfig.CentralTrainingConfig.
 from Config.ModelTrainingConfig.ClientModelTrainingConfig.CentralTrainingConfig.GAN.Generator.ACGenCentralTrainingConfig import CentralACGenerator
 from Config.ModelTrainingConfig.ClientModelTrainingConfig.CentralTrainingConfig.GAN.Discriminator.ACDiscREALCentralTrainingConfig import CentralACDiscREAL
 from Config.ModelTrainingConfig.ClientModelTrainingConfig.CentralTrainingConfig.GAN.Discriminator.ACDiscCentralTrainingConfig import CentralACDisc
+from Config.ModelTrainingConfig.ClientModelTrainingConfig.CentralTrainingConfig.FusionMLP.fusionMLPCentralTrainingConfig import CentralFusionMLPClient
 
 # from Config.ModelTrainingConfig.ClientModelTrainingConfig.CentralTrainingConfig.GAN.FullModel.CANGANCentralTrainingConfig import CANGAN
 
@@ -53,7 +54,7 @@ def modelCentralTrainingConfigLoad(nids, discriminator, generator, GAN, dataset_
                                    learning_rate, l2_alpha, l2_norm_clip, noise_multiplier, num_microbatches,
                                    metric_to_monitor_es, es_patience, restor_best_w, metric_to_monitor_l2lr,
                                    l2lr_patience, save_best_only, metric_to_monitor_mc, checkpoint_mode, evaluationLog,
-                                   trainingLog):
+                                   trainingLog, args=None):
 
     client = None
 
@@ -105,6 +106,42 @@ def modelCentralTrainingConfigLoad(nids, discriminator, generator, GAN, dataset_
             client = CentralBinaryWDisc(GAN, nids, X_train_data, X_val_data, y_train_data, y_val_data, X_test_data,
                                    y_test_data, BATCH_SIZE,
                                    noise_dim, epochs, steps_per_epoch, learning_rate)
+
+    elif model_type == 'FUSION-MLP':
+        # Phase B.5 — centralized multi-task MLP trainer. ``nids`` holds
+        # the FUSION-MLP per the modelCreateLoad slot convention.
+        # Fusion-specific kwargs are pulled from ``args`` to keep the
+        # legacy positional tuple stable for every other trainer.
+        if args is None:
+            raise ValueError(
+                "FUSION-MLP centralized trainer requires args (for "
+                "escalation_loss_weight). Pass args=args from the entry point."
+            )
+        client = CentralFusionMLPClient(
+            model=nids,
+            x_train=X_train_data, x_val=X_val_data, x_test=X_test_data,
+            y_train=y_train_data, y_val=y_val_data, y_test=y_test_data,
+            BATCH_SIZE=BATCH_SIZE, epochs=epochs,
+            steps_per_epoch=steps_per_epoch,
+            learning_rate=learning_rate,
+            num_classes=num_classes,
+            escalation_loss_weight=args.escalation_loss_weight,
+            shuffle_seed=getattr(args, "commcrime_random_seed", 0),
+            evaluation_log=evaluationLog,
+            training_log=trainingLog,
+            node=node,
+            earlyStopEnabled=earlyStopEnabled,
+            lrSchedRedEnabled=lrSchedRedEnabled,
+            modelCheckpointEnabled=modelCheckpointEnabled,
+            metric_to_monitor_es=metric_to_monitor_es,
+            es_patience=es_patience or 5,
+            restor_best_w=restor_best_w if restor_best_w is not None else True,
+            metric_to_monitor_l2lr=metric_to_monitor_l2lr,
+            l2lr_patience=l2lr_patience or 3,
+            metric_to_monitor_mc=metric_to_monitor_mc,
+            save_best_only=save_best_only if save_best_only is not None else True,
+            checkpoint_mode=checkpoint_mode or "min",
+        )
 
     elif model_type == 'AC-GAN':
         if train_type == "Both":

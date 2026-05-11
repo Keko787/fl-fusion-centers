@@ -50,8 +50,26 @@ def main():
     #
     # No code outside this branch may import hermes.* — enforced by the
     # repo-wide grep test (M6 in tests/unit/test_mode_switch.py).
+    # FUSION-MLP / COMMCRIME is not wired through hermes (fusion-centers
+    # design doc §4.1 defers it). Reject explicitly rather than letting
+    # _run_hermes_main below produce a confusing stub error.
+    if args.mode == "hermes" and args.model_type == "FUSION-MLP":
+        raise SystemExit(
+            "FUSION-MLP does not support --mode hermes; use --mode legacy."
+        )
     if args.mode == "hermes":
         _run_hermes_main(args)
+        return
+
+    # FUSION-MLP dispatches to the single-node Flower simulation runner
+    # before the legacy server-strategy machinery (Phase C.5). The
+    # simulation runner owns its own data load, strategy, and client
+    # factory — none of the legacy server-side strategies apply.
+    if args.model_type == "FUSION-MLP":
+        from Config.ModelTrainingConfig.HostModelTrainingConfig.FusionCenters.SimulationRunner import (
+            run_fusion_simulation,
+        )
+        run_fusion_simulation(args)
         return
 
     print("MODE=legacy; running Flower server")
@@ -123,7 +141,8 @@ def main():
                                                           args.pretrained_GAN, args.pretrained_generator,
                                                           args.pretrained_discriminator, args.dataset,
                                                           input_dim, noise_dim, args.regularizationEnabled,
-                                                          args.DP_enabled, l2_alpha, latent_dim, num_classes)
+                                                          args.DP_enabled, l2_alpha, latent_dim, num_classes,
+                                                          seed=getattr(args, "commcrime_random_seed", None))
         # --- 7. Select model for base hosting config --- #
         # selet model for base hosting config
         if train_type == "GAN":

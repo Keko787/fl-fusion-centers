@@ -54,6 +54,15 @@ def main():
     #
     # No code outside this branch may import hermes.* — enforced by the
     # repo-wide grep test (M6 in tests/unit/test_mode_switch.py).
+    #
+    # FUSION-MLP / COMMCRIME is not wired through hermes (fusion-centers
+    # design doc §4.1 defers it). Reject the combination explicitly so
+    # the user gets a clear message instead of a confusing stub error
+    # from _run_hermes_main below.
+    if args.mode == "hermes" and args.model_type == "FUSION-MLP":
+        raise SystemExit(
+            "FUSION-MLP does not support --mode hermes; use --mode legacy."
+        )
     if args.mode == "hermes":
         _run_hermes_main(args)
         return
@@ -94,7 +103,8 @@ def main():
                                                           args.pretrained_GAN, args.pretrained_generator,
                                                           args.pretrained_discriminator, args.dataset,
                                                           input_dim, noise_dim, args.regularizationEnabled,
-                                                          args.DP_enabled, l2_alpha, latent_dim, num_classes)
+                                                          args.DP_enabled, l2_alpha, latent_dim, num_classes,
+                                                          seed=getattr(args, "commcrime_random_seed", None))
 
     print("✅ Models Initialized Successfully!")
     print()
@@ -113,7 +123,7 @@ def main():
                                                   noise_multiplier, num_microbatches, metric_to_monitor_es, es_patience,
                                                   restor_best_w, metric_to_monitor_l2lr, l2lr_patience, save_best_only,
                                                   metric_to_monitor_mc, checkpoint_mode, args.evaluationLog,
-                                                  args.trainingLog)
+                                                  args.trainingLog, args=args)
         # -- Selecting Host -- #
         # Custom Address
         if args.custom_host is not None:
@@ -154,7 +164,7 @@ def main():
                                                 noise_multiplier, num_microbatches, metric_to_monitor_es, es_patience,
                                                 restor_best_w, metric_to_monitor_l2lr, l2lr_patience, save_best_only,
                                                 metric_to_monitor_mc, checkpoint_mode, args.evaluationLog,
-                                                args.trainingLog)
+                                                args.trainingLog, args=args)
 
         # --- 6A Centrally Train Model ---#
         client.fit()
@@ -163,7 +173,14 @@ def main():
         client.evaluate()
 
     # --- 8 Locally Save Model After Training ---#
-        client.save(args.save_name)
+        # FUSION-MLP runs put the model artifact alongside the run dir
+        # (partition_stats.json, scaler.joblib, evaluation log) so the
+        # whole experiment is bundled. Other trainers fall back to the
+        # legacy ModelArchive/ default.
+        if args.model_type == "FUSION-MLP":
+            client.save(args.save_name, archive_path=args.run_dir)
+        else:
+            client.save(args.save_name)
     # -- EOF Central/Local TRAINING -- #
 
 

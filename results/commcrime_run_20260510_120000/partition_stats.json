@@ -1,0 +1,441 @@
+{
+  "strategy": "iid",
+  "num_clients": 5,
+  "seed": 42,
+  "global_test_size": 0.15,
+  "val_frac": 0.2,
+  "dirichlet_alpha": null,
+  "unmapped_state_rows": 0,
+  "dropped_sensitive_columns": [
+    "racepctblack",
+    "racePctWhite",
+    "medIncome",
+    "pctWInvInc"
+  ],
+  "audit": {
+    "n_rows": 300,
+    "n_cols": 29,
+    "memory_mb": 0.085,
+    "missing_per_col": {},
+    "state_value_counts": {
+      "17": 39,
+      "6": 32,
+      "13": 32,
+      "22": 31,
+      "12": 29,
+      "36": 29,
+      "48": 28,
+      "39": 28,
+      "51": 27,
+      "25": 25
+    }
+  },
+  "global_test_stats": {
+    "n_rows": 45,
+    "class_distribution": {
+      "0": 36,
+      "1": 9
+    },
+    "escalation_mean": 0.45519357919692993,
+    "feature_mean": {
+      "population": 0.4869001588486133,
+      "householdsize": 0.4930353753203749,
+      "agePct12t21": 0.4262359646201794,
+      "agePct65up": 0.42956404690178546,
+      "PctUnemployed": 0.5507275297656519,
+      "PctEmploy": 0.45378940984372823,
+      "PctIlleg": 0.3894518674048019,
+      "PctLargHouseFam": 0.6082648072702516,
+      "HousVacant": 0.5377579870102909,
+      "PctHousOccup": 0.5158331774525255,
+      "MedRent": 0.4691098867984116,
+      "NumStreet": 0.48868578836079263
+    },
+    "feature_std": {
+      "population": 0.2900530594859494,
+      "householdsize": 0.2935689268771754,
+      "agePct12t21": 0.2889339444040663,
+      "agePct65up": 0.2840049931547347,
+      "PctUnemployed": 0.2889866705274716,
+      "PctEmploy": 0.2939829297375814,
+      "PctIlleg": 0.2545531670082093,
+      "PctLargHouseFam": 0.2830728601687575,
+      "HousVacant": 0.2827652037327263,
+      "PctHousOccup": 0.23005327861132915,
+      "MedRent": 0.27564717542368283,
+      "NumStreet": 0.32202438150605295
+    }
+  },
+  "clients": {
+    "0": {
+      "train": {
+        "n_rows": 41,
+        "class_distribution": {
+          "0": 34,
+          "1": 7
+        },
+        "escalation_mean": 0.45262718200683594,
+        "feature_mean": {
+          "population": 0.5013375485295436,
+          "householdsize": 0.5155759047171845,
+          "agePct12t21": 0.4702578767737207,
+          "agePct65up": 0.5230230116111694,
+          "PctUnemployed": 0.43280666926556155,
+          "PctEmploy": 0.5056824274064939,
+          "PctIlleg": 0.514556283438906,
+          "PctLargHouseFam": 0.44634779319123996,
+          "HousVacant": 0.5165757437983585,
+          "PctHousOccup": 0.453641445508244,
+          "MedRent": 0.46984804534406865,
+          "NumStreet": 0.5031816700506032
+        },
+        "feature_std": {
+          "population": 0.29363214038693924,
+          "householdsize": 0.30139094187584475,
+          "agePct12t21": 0.2740473268217609,
+          "agePct65up": 0.2759549658987989,
+          "PctUnemployed": 0.3243608134493964,
+          "PctEmploy": 0.27017638549339984,
+          "PctIlleg": 0.3169371362692633,
+          "PctLargHouseFam": 0.29605918674926773,
+          "HousVacant": 0.2756474017244433,
+          "PctHousOccup": 0.2748967278161691,
+          "MedRent": 0.24851833634898798,
+          "NumStreet": 0.2584168489306486
+        }
+      },
+      "val": {
+        "n_rows": 10,
+        "class_distribution": {
+          "0": 7,
+          "1": 3
+        },
+        "escalation_mean": 0.5404797196388245,
+        "feature_mean": {
+          "population": 0.6584558589756317,
+          "householdsize": 0.4117257703821429,
+          "agePct12t21": 0.45272992875070006,
+          "agePct65up": 0.4935907604542981,
+          "PctUnemployed": 0.6611516806900946,
+          "PctEmploy": 0.5690709446951905,
+          "PctIlleg": 0.515490877313991,
+          "PctLargHouseFam": 0.2617090280351225,
+          "HousVacant": 0.4757405972812812,
+          "PctHousOccup": 0.4684526687785633,
+          "MedRent": 0.5132658815652984,
+          "NumStreet": 0.4464991887020108
+        },
+        "feature_std": {
+          "population": 0.2867834311111408,
+          "householdsize": 0.3047925038580067,
+          "agePct12t21": 0.33920811784519056,
+          "agePct65up": 0.2520104750413627,
+          "PctUnemployed": 0.2704593971482141,
+          "PctEmploy": 0.28441476322488535,
+          "PctIlleg": 0.35915168636234895,
+          "PctLargHouseFam": 0.2026924132357968,
+          "HousVacant": 0.17671837539586158,
+          "PctHousOccup": 0.23507644758202853,
+          "MedRent": 0.31890700486139195,
+          "NumStreet": 0.34752716734967365
+        }
+      }
+    },
+    "1": {
+      "train": {
+        "n_rows": 41,
+        "class_distribution": {
+          "0": 32,
+          "1": 9
+        },
+        "escalation_mean": 0.4377155900001526,
+        "feature_mean": {
+          "population": 0.5752719965870151,
+          "householdsize": 0.5367730457071492,
+          "agePct12t21": 0.5355349474928155,
+          "agePct65up": 0.5454332267901868,
+          "PctUnemployed": 0.5689708852634687,
+          "PctEmploy": 0.5050177436405413,
+          "PctIlleg": 0.5568878199301341,
+          "PctLargHouseFam": 0.5056723701015617,
+          "HousVacant": 0.5239213497405919,
+          "PctHousOccup": 0.5347302606255016,
+          "MedRent": 0.5101406097359853,
+          "NumStreet": 0.5150828464832037
+        },
+        "feature_std": {
+          "population": 0.31937451333629413,
+          "householdsize": 0.2814360777733074,
+          "agePct12t21": 0.28256261777343084,
+          "agePct65up": 0.28269991202585465,
+          "PctUnemployed": 0.29318433072390554,
+          "PctEmploy": 0.2658145203115702,
+          "PctIlleg": 0.2770056424188045,
+          "PctLargHouseFam": 0.2904598062277689,
+          "HousVacant": 0.2755974213077406,
+          "PctHousOccup": 0.29742350830704484,
+          "MedRent": 0.2616419995745209,
+          "NumStreet": 0.3088552002652596
+        }
+      },
+      "val": {
+        "n_rows": 10,
+        "class_distribution": {
+          "0": 8,
+          "1": 2
+        },
+        "escalation_mean": 0.5194032788276672,
+        "feature_mean": {
+          "population": 0.5346155858347126,
+          "householdsize": 0.5564451445729203,
+          "agePct12t21": 0.5324115356205285,
+          "agePct65up": 0.5082537140046076,
+          "PctUnemployed": 0.6014799871641754,
+          "PctEmploy": 0.5540104217402236,
+          "PctIlleg": 0.5954717844268544,
+          "PctLargHouseFam": 0.4340088938292565,
+          "HousVacant": 0.5455582418715931,
+          "PctHousOccup": 0.66395933015659,
+          "MedRent": 0.42873519699623647,
+          "NumStreet": 0.3284192601854286
+        },
+        "feature_std": {
+          "population": 0.3152287119614363,
+          "householdsize": 0.24620755456078652,
+          "agePct12t21": 0.2712144905537252,
+          "agePct65up": 0.3016712182741783,
+          "PctUnemployed": 0.20576016876542355,
+          "PctEmploy": 0.2370181508000862,
+          "PctIlleg": 0.29932646735663604,
+          "PctLargHouseFam": 0.18844074862530752,
+          "HousVacant": 0.286823615969422,
+          "PctHousOccup": 0.20549673077130562,
+          "MedRent": 0.32566183665640425,
+          "NumStreet": 0.25331244572925415
+        }
+      }
+    },
+    "2": {
+      "train": {
+        "n_rows": 41,
+        "class_distribution": {
+          "0": 31,
+          "1": 10
+        },
+        "escalation_mean": 0.3985491394996643,
+        "feature_mean": {
+          "population": 0.5063721705485204,
+          "householdsize": 0.5164595699407434,
+          "agePct12t21": 0.480523837511613,
+          "agePct65up": 0.5624378016907678,
+          "PctUnemployed": 0.5105228585681107,
+          "PctEmploy": 0.4170544198070433,
+          "PctIlleg": 0.48076812717124323,
+          "PctLargHouseFam": 0.4506951776456804,
+          "HousVacant": 0.4735909464860923,
+          "PctHousOccup": 0.5059932457990394,
+          "MedRent": 0.5160879517557526,
+          "NumStreet": 0.5791077161375828
+        },
+        "feature_std": {
+          "population": 0.3034157129942429,
+          "householdsize": 0.3051198331285986,
+          "agePct12t21": 0.3362707436837889,
+          "agePct65up": 0.2873402415194441,
+          "PctUnemployed": 0.25360588324037187,
+          "PctEmploy": 0.2624548455696893,
+          "PctIlleg": 0.29821798866435606,
+          "PctLargHouseFam": 0.29057280482288933,
+          "HousVacant": 0.2840664184633255,
+          "PctHousOccup": 0.23569035918475628,
+          "MedRent": 0.31173021129754386,
+          "NumStreet": 0.2676715091271048
+        }
+      },
+      "val": {
+        "n_rows": 10,
+        "class_distribution": {
+          "0": 8,
+          "1": 2
+        },
+        "escalation_mean": 0.4853614866733551,
+        "feature_mean": {
+          "population": 0.37840731551938894,
+          "householdsize": 0.5645465249184353,
+          "agePct12t21": 0.3097575436586637,
+          "agePct65up": 0.42296964986917607,
+          "PctUnemployed": 0.3958540236599319,
+          "PctEmploy": 0.5997890348742325,
+          "PctIlleg": 0.4082831677841283,
+          "PctLargHouseFam": 0.48612904271262947,
+          "HousVacant": 0.41540824953860245,
+          "PctHousOccup": 0.3754567980804085,
+          "MedRent": 0.3695119231345783,
+          "NumStreet": 0.5053578541083134
+        },
+        "feature_std": {
+          "population": 0.3661156453962551,
+          "householdsize": 0.28641037546628245,
+          "agePct12t21": 0.3119123721709576,
+          "agePct65up": 0.26614891808302243,
+          "PctUnemployed": 0.2281823451933613,
+          "PctEmploy": 0.3557693250598154,
+          "PctIlleg": 0.15602086003130783,
+          "PctLargHouseFam": 0.34722286481865233,
+          "HousVacant": 0.30845120945506227,
+          "PctHousOccup": 0.2644951658182687,
+          "MedRent": 0.29906500249443374,
+          "NumStreet": 0.336003762740133
+        }
+      }
+    },
+    "3": {
+      "train": {
+        "n_rows": 41,
+        "class_distribution": {
+          "0": 35,
+          "1": 6
+        },
+        "escalation_mean": 0.46712005138397217,
+        "feature_mean": {
+          "population": 0.5188895636879874,
+          "householdsize": 0.5416691629111384,
+          "agePct12t21": 0.5122584626804009,
+          "agePct65up": 0.5142727387827413,
+          "PctUnemployed": 0.47097931110909497,
+          "PctEmploy": 0.554523833329778,
+          "PctIlleg": 0.535680439283274,
+          "PctLargHouseFam": 0.5081010121739593,
+          "HousVacant": 0.5878792326489776,
+          "PctHousOccup": 0.4597057639520845,
+          "MedRent": 0.4383303814464381,
+          "NumStreet": 0.505112873669241
+        },
+        "feature_std": {
+          "population": 0.28366025599179606,
+          "householdsize": 0.28488282339298854,
+          "agePct12t21": 0.2795882185183059,
+          "agePct65up": 0.312298234803793,
+          "PctUnemployed": 0.2887300740586151,
+          "PctEmploy": 0.2902318076073437,
+          "PctIlleg": 0.28514682626128773,
+          "PctLargHouseFam": 0.28831206625695943,
+          "HousVacant": 0.29895272785478416,
+          "PctHousOccup": 0.30521016010928304,
+          "MedRent": 0.3058165743154699,
+          "NumStreet": 0.29560028237060865
+        }
+      },
+      "val": {
+        "n_rows": 10,
+        "class_distribution": {
+          "0": 8,
+          "1": 2
+        },
+        "escalation_mean": 0.35456058382987976,
+        "feature_mean": {
+          "population": 0.47926522746971456,
+          "householdsize": 0.5087342435840319,
+          "agePct12t21": 0.5142193241637021,
+          "agePct65up": 0.6713902149763663,
+          "PctUnemployed": 0.7196213912728779,
+          "PctEmploy": 0.4469986255005159,
+          "PctIlleg": 0.45435297970162836,
+          "PctLargHouseFam": 0.47064738828159747,
+          "HousVacant": 0.6778734863076875,
+          "PctHousOccup": 0.5500322353503713,
+          "MedRent": 0.44222759546915463,
+          "NumStreet": 0.5337701881570744
+        },
+        "feature_std": {
+          "population": 0.3163556085610198,
+          "householdsize": 0.3337697016508687,
+          "agePct12t21": 0.25011338575696795,
+          "agePct65up": 0.2711729196167346,
+          "PctUnemployed": 0.2805194853005993,
+          "PctEmploy": 0.29023928625047957,
+          "PctIlleg": 0.3778040639549061,
+          "PctLargHouseFam": 0.29498553627507323,
+          "HousVacant": 0.19309203990101353,
+          "PctHousOccup": 0.2947043210039855,
+          "MedRent": 0.24605917520713963,
+          "NumStreet": 0.29500714210594864
+        }
+      }
+    },
+    "4": {
+      "train": {
+        "n_rows": 41,
+        "class_distribution": {
+          "0": 33,
+          "1": 8
+        },
+        "escalation_mean": 0.4860948324203491,
+        "feature_mean": {
+          "population": 0.46398655625777346,
+          "householdsize": 0.4777835419349183,
+          "agePct12t21": 0.46252290466613455,
+          "agePct65up": 0.5289857864832685,
+          "PctUnemployed": 0.5270483380480852,
+          "PctEmploy": 0.4707513290037607,
+          "PctIlleg": 0.4730174091627028,
+          "PctLargHouseFam": 0.4542444844533973,
+          "HousVacant": 0.4695066729851346,
+          "PctHousOccup": 0.46412084048004915,
+          "MedRent": 0.5052203711980469,
+          "NumStreet": 0.4844215291676016
+        },
+        "feature_std": {
+          "population": 0.26262957801598963,
+          "householdsize": 0.2939978997029776,
+          "agePct12t21": 0.29827361781025186,
+          "agePct65up": 0.30258368016521814,
+          "PctUnemployed": 0.27783121679636297,
+          "PctEmploy": 0.2577721117895335,
+          "PctIlleg": 0.3267614608791619,
+          "PctLargHouseFam": 0.3154216618630075,
+          "HousVacant": 0.27483300277412126,
+          "PctHousOccup": 0.2732999750144278,
+          "MedRent": 0.266079673522732,
+          "NumStreet": 0.31471419507638865
+        }
+      },
+      "val": {
+        "n_rows": 10,
+        "class_distribution": {
+          "0": 7,
+          "1": 3
+        },
+        "escalation_mean": 0.4609159529209137,
+        "feature_mean": {
+          "population": 0.3603430629119708,
+          "householdsize": 0.5206920029560119,
+          "agePct12t21": 0.30705639741691676,
+          "agePct65up": 0.4935909438404564,
+          "PctUnemployed": 0.44722902478040166,
+          "PctEmploy": 0.6362984417665402,
+          "PctIlleg": 0.6166075277953376,
+          "PctLargHouseFam": 0.5050728425688271,
+          "HousVacant": 0.44591965374262366,
+          "PctHousOccup": 0.4866967212873985,
+          "MedRent": 0.6559551060425934,
+          "NumStreet": 0.4263845042621101
+        },
+        "feature_std": {
+          "population": 0.29685600667644674,
+          "householdsize": 0.18248208725651183,
+          "agePct12t21": 0.31357589490164733,
+          "agePct65up": 0.3354009363550391,
+          "PctUnemployed": 0.3427662025090832,
+          "PctEmploy": 0.29903030273840486,
+          "PctIlleg": 0.2473224530320581,
+          "PctLargHouseFam": 0.37836373893490055,
+          "HousVacant": 0.19260841902352208,
+          "PctHousOccup": 0.3280321361486765,
+          "MedRent": 0.22874146066492768,
+          "NumStreet": 0.3337935555695984
+        }
+      }
+    }
+  }
+}

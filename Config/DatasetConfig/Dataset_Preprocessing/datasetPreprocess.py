@@ -605,3 +605,17 @@ def preprocess_live_dataset(live_data=None, irrelevant_features=None):
     print("\n=== Data Assigned ===\n")
     return X_live_data
 
+
+################################################################################################################
+#                                COMMCRIME (Fusion Centers, Phase A.4)                                         #
+################################################################################################################
+
+# Re-export from the COMMCRIME module. The implementation lives there
+# (no flwr/tensorflow deps) so the Phase A tests can import it without
+# pulling in the heavy stack the rest of this module needs. The legacy
+# dispatcher path ``from Config.DatasetConfig.Dataset_Preprocessing.datasetPreprocess import preprocess_communities_crime``
+# is preserved.
+from Config.DatasetConfig.CommunitiesCrime_Sampling.commCrimePreprocess import (
+    preprocess_communities_crime,
+)
+

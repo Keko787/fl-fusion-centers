@@ -35,11 +35,12 @@ from Config.modelStructures.NIDS.NIDS_Struct import create_CICIOT_Model, create_
 from Config.modelStructures.GAN.discriminatorStruct import create_discriminator_binary, create_discriminator_binary_optimized, create_discriminator_binary, build_AC_discriminator, create_discriminator
 from Config.modelStructures.GAN.generatorStruct import create_generator, create_generator_optimized, build_AC_generator
 from Config.modelStructures.GAN.ganStruct import create_model, load_GAN_model, create_model_binary, create_model_binary_optimized, create_model_W_binary, load_and_merge_ACmodels, create_model_AC, merge_AC_model_instances
+from Config.modelStructures.FusionMLP.multiTaskMLPStruct import build_fusion_mlp, load_fusion_mlp
 
 
 def modelCreateLoad(modelType, train_type, pretrainedNids, pretrainedGan, pretrainedGenerator, pretrainedDiscriminator,
                     dataset_used, input_dim, noise_dim, regularizationEnabled, DP_enabled, l2_alpha,
-                    latent_dim, num_classes):
+                    latent_dim, num_classes, seed=None):
     nids = None
     discriminator = None
     generator = None
@@ -318,6 +319,31 @@ def modelCreateLoad(modelType, train_type, pretrainedNids, pretrainedGan, pretra
 
             # Create merged GAN model container for training
             GAN = merge_AC_model_instances(generator, discriminator, latent_dim, num_classes)
+
+    elif modelType == 'FUSION-MLP':
+        # Phase B.3 — multi-task MLP slots into the ``nids`` return
+        # position; the trainer routes through that slot. The other
+        # three slots stay None because there is no GAN component.
+        #
+        # Re-seed TF right before model construction so weight init is
+        # byte-reproducible across runs with the same seed. The
+        # Phase A.7 ``seed_all()`` runs earlier in the dispatcher, but
+        # data-loading RNG draws (partitioning, preprocessing) between
+        # then and now would otherwise leave the model RNG in an
+        # input-dependent state. ``tf.keras.utils.set_random_seed``
+        # seeds Python random, NumPy, and TF together — the documented
+        # Keras-3 way; ``tf.random.set_seed`` alone is not enough for
+        # layer-initializer determinism.
+        if seed is not None:
+            tf.keras.utils.set_random_seed(int(seed))
+        if pretrainedNids:
+            print(f"Loading pretrained FUSION-MLP from {pretrainedNids}")
+            nids = load_fusion_mlp(pretrainedNids)
+        else:
+            print("No pretrained FUSION-MLP provided. Creating a new model.")
+            nids = build_fusion_mlp(input_dim=input_dim,
+                                    num_classes=num_classes,
+                                    l2_alpha=l2_alpha if regularizationEnabled else 0.0)
 
     elif modelType == 'CANGAN':
         if train_type == 'Both':

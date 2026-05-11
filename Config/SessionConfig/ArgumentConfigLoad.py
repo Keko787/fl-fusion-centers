@@ -20,11 +20,15 @@ def parse_training_client_args():
     parser = argparse.ArgumentParser(description='Select dataset, model selection, and to enable DP respectively')
 
     # ───  Dataset Settings ───
-    parser.add_argument('--dataset', type=str, choices=["CICIOT", "IOTBOTNET", "IOT", "CANGAN"], default="CICIOT",
-                        help='Datasets to use: CICIOT, IOTBOTNET, IOT (different from IOTBOTNET)')
+    parser.add_argument('--dataset', type=str,
+                        choices=["CICIOT", "IOTBOTNET", "IOT", "CANGAN", "COMMCRIME", "NIBRS"],
+                        default="CICIOT",
+                        help='Datasets to use: CICIOT, IOTBOTNET, IOT, CANGAN, COMMCRIME (Communities & Crime, fusion centers), NIBRS (reserved)')
 
-    parser.add_argument('--dataset_processing', type=str, choices=["Default", "MM[-1,-1]", "AC-GAN, IOT", "IOT-MinMax", "CANGAN"],
-                        default="Default", help='Datasets to use: Default, MM[-1,1], AC-GAN, IOT')
+    parser.add_argument('--dataset_processing', type=str,
+                        choices=["Default", "MM[-1,-1]", "AC-GAN, IOT", "IOT-MinMax", "CANGAN",
+                                 "COMMCRIME", "COMMCRIME-MM"],
+                        default="Default", help='Datasets to use: Default, MM[-1,1], AC-GAN, IOT, COMMCRIME (StandardScaler), COMMCRIME-MM (MinMax)')
 
     # ─── CICIOT2023 Dataset Settings ───
     parser.add_argument("--ciciot_train_sample_size", type=int, default=50,
@@ -45,6 +49,30 @@ def parse_training_client_args():
 
     parser.add_argument("--ciciot_random_seed", type=int, default=110, help="Dataset file sampling consistency.")
 
+    # ─── Fusion Centers / Communities-Crime Settings ───
+    parser.add_argument("--commcrime_path", type=str, default=None,
+                        help="Path to the UCI Communities-Crime raw CSV. If omitted, the loader reads from $HOME/datasets/CommunitiesCrime/ and downloads on first run.")
+    parser.add_argument("--commcrime_random_seed", type=int, default=42,
+                        help="Seed for all stochastic COMMCRIME steps (partition, IID shuffle, Dirichlet, train/val).")
+    parser.add_argument("--num_clients", type=int, choices=[1, 3, 5, 10], default=5,
+                        help="Number of simulated agencies for FUSION-MLP partitioning. Choices: 3, 5, 10.")
+    parser.add_argument("--partition_strategy", type=str,
+                        choices=["geographic", "iid", "dirichlet"], default="geographic",
+                        help="How to split COMMCRIME across clients. Default: geographic (state→region bucket).")
+    parser.add_argument("--dirichlet_alpha", type=float, default=0.5,
+                        help="Dirichlet concentration for partition_strategy=dirichlet. Smaller = more non-IID.")
+    parser.add_argument("--client_id", type=int, default=0,
+                        help="Which partition this client loads (Central or real-multi-process FL). Ignored under simulation mode.")
+    parser.add_argument("--global_test_size", type=float, default=0.15,
+                        help="Fraction of COMMCRIME held out as the shared global test set (frozen on first call).")
+    parser.add_argument("--escalation_loss_weight", type=float, default=0.5,
+                        help="β in L = (1-β)·CE + β·BCE. α (class-head weight) is set to 1-β.")
+    parser.add_argument("--drop_sensitive_features",
+                        action=argparse.BooleanOptionalAction, default=True,
+                        help="Drop documented-bias columns (race, ethnicity, income) before training. Default: True per design doc §8.4. Use --no-drop_sensitive_features for the Phase E ablation row.")
+    parser.add_argument("--run_dir", type=str, default=None,
+                        help="Re-use an existing fusion-centers run dir (frozen global test split, shared partition stats). If omitted a fresh timestamped dir is created under results/. Required for multi-process FL where every client must read the same global test set.")
+
     # ─── Federation Settings ───
     parser.add_argument('--trainingArea', type=str, choices=["Central", "Federated"], default="Central",
                         help='Please select Central, Federated as the place to train the model')
@@ -61,12 +89,13 @@ def parse_training_client_args():
     # ─── Model Training Settings ───
     parser.add_argument('--model_type', type=str,
                         choices=["NIDS", "NIDS-IOT-Binary", "NIDS-IOT-Multiclass", "NIDS-IOT-Multiclass-Dynamic", "GAN",
-                                 "WGAN-GP", "AC-GAN", "CANGAN"],
-                        help='Please select NIDS, NIDS-IOT-Binary, NIDS-IOT-Multiclass, NIDS-IOT-Multiclass-Dynamic, GAN, WGAN-GP, or AC-GAN as the model type to train')
+                                 "WGAN-GP", "AC-GAN", "CANGAN", "FUSION-MLP"],
+                        help='Please select NIDS, NIDS-IOT-Binary, NIDS-IOT-Multiclass, NIDS-IOT-Multiclass-Dynamic, GAN, WGAN-GP, AC-GAN, or FUSION-MLP (Fusion Centers multi-task MLP)')
 
-    parser.add_argument('--model_training', type=str, choices=["NIDS", "Generator", "Discriminator", "Both"],
+    parser.add_argument('--model_training', type=str,
+                        choices=["NIDS", "Generator", "Discriminator", "Both", "MultiTask"],
                         default="Both",
-                        help='Please select NIDS, Generator, Discriminator, Both as the sub-model type to train')
+                        help='Please select NIDS, Generator, Discriminator, Both, MultiTask (FUSION-MLP)')
 
     # ─── Model Training Session Settings ───
     parser.add_argument("--epochs", type=int, default=5, help="Number of epochs to train the model")
@@ -147,6 +176,15 @@ def parse_training_client_args():
     if args.dataset_processing in ["IOT", "IOT-MinMax"]:
         args.dataset = "IOT"
 
+    # FUSION-MLP locks the dataset and training mode (design doc §3.1).
+    # Only overrides defaults — explicit user choices (e.g. COMMCRIME-MM
+    # for an ablation) survive.
+    if args.model_type == "FUSION-MLP":
+        args.model_training = "MultiTask"
+        args.dataset = "COMMCRIME"
+        if args.dataset_processing == "Default":
+            args.dataset_processing = "COMMCRIME"
+
     # ─── Add computed fields ───
     args.timestamp = timestamp
     args.regularizationEnabled = True
@@ -154,8 +192,11 @@ def parse_training_client_args():
     args.earlyStopEnabled = None
     args.lrSchedRedEnabled = None
     args.modelCheckpointEnabled = None
-    args.evaluationLog = timestamp
-    args.trainingLog = timestamp
+    # Distinct filenames so training metrics and evaluation metrics
+    # don't get interleaved into a single bare-timestamp file (the
+    # pre-existing project pattern collapsed them together).
+    args.evaluationLog = f"{timestamp}_evaluation.log"
+    args.trainingLog = f"{timestamp}_training.log"
     args.node = 1
 
     return args
@@ -182,6 +223,22 @@ def display_training_client_opening_message(args, timestamp):
     print(f"🧠 Model Type: {args.model_type}")
     print(f"🎯 Submodel Training Method: {args.model_training}")
     print(f"🔢 Epochs: {args.epochs}")
+
+    # Fusion Centers Configuration (only relevant for COMMCRIME / FUSION-MLP)
+    if args.model_type == "FUSION-MLP" or args.dataset == "COMMCRIME":
+        print("-" * 40)
+        print("🏛️  FUSION CENTERS CONFIG:")
+        print(f"   • Partition Strategy: {args.partition_strategy}")
+        print(f"   • Number of Clients: {args.num_clients}")
+        print(f"   • Client ID: {args.client_id}")
+        if args.partition_strategy == "dirichlet":
+            print(f"   • Dirichlet α: {args.dirichlet_alpha}")
+        print(f"   • Global Test Size: {args.global_test_size}")
+        print(f"   • Escalation Loss Weight (β): {args.escalation_loss_weight}")
+        print(f"   • Drop Sensitive Features: {args.drop_sensitive_features}")
+        print(f"   • Random Seed: {args.commcrime_random_seed}")
+        if args.run_dir:
+            print(f"   • Run Dir (reuse): {args.run_dir}")
 
     # Pre-trained Models Section
     if any([args.pretrained_GAN, args.pretrained_generator, args.pretrained_discriminator, args.pretrained_nids]):
@@ -245,11 +302,16 @@ def parse_HFL_Host_args():
     parser = argparse.ArgumentParser(description='Hierarchical Federated Learning Host Server Configuration')
 
     # ───  Dataset Settings ───
-    parser.add_argument('--dataset', type=str, choices=["CICIOT", "IOTBOTNET", "IOT"], default="CICIOT",
-                        help='Datasets to use: CICIOT, IOTBOTNET, IOT (different from IOTBOTNET)')
+    parser.add_argument('--dataset', type=str,
+                        choices=["CICIOT", "IOTBOTNET", "IOT", "COMMCRIME", "NIBRS"],
+                        default="CICIOT",
+                        help='Datasets to use: CICIOT, IOTBOTNET, IOT, COMMCRIME (fusion centers), NIBRS (reserved)')
 
-    parser.add_argument('--dataset_processing', type=str, choices=["Default", "MM[-1,-1]", "AC-GAN, IOT", "IOT-MinMax"],
-                        default="Default", help='Dataset preprocessing: Default, MM[-1,1], AC-GAN, IOT')
+    parser.add_argument('--dataset_processing', type=str,
+                        choices=["Default", "MM[-1,-1]", "AC-GAN, IOT", "IOT-MinMax",
+                                 "COMMCRIME", "COMMCRIME-MM"],
+                        default="Default",
+                        help='Dataset preprocessing: Default, MM[-1,1], AC-GAN, IOT, COMMCRIME, COMMCRIME-MM')
 
     # ─── CICIOT2023 Dataset Settings ───
     parser.add_argument("--ciciot_train_sample_size", type=int, default=50,
@@ -283,12 +345,13 @@ def parse_HFL_Host_args():
     # ─── Model Configuration ───
     parser.add_argument('--model_type', type=str,
                         choices=["NIDS", "NIDS-IOT-Binary", "NIDS-IOT-Multiclass", "NIDS-IOT-Multiclass-Dynamic", "GAN",
-                                 "WGAN-GP", "AC-GAN"],
-                        help='Model architecture: NIDS variants, GAN variants')
+                                 "WGAN-GP", "AC-GAN", "FUSION-MLP"],
+                        help='Model architecture: NIDS variants, GAN variants, FUSION-MLP (fusion centers)')
 
-    parser.add_argument('--model_training', type=str, choices=["NIDS", "Discriminator", "GAN"],
+    parser.add_argument('--model_training', type=str,
+                        choices=["NIDS", "Discriminator", "GAN", "MultiTask"],
                         default="GAN",
-                        help='Training focus: NIDS, Discriminator, or Both components')
+                        help='Training focus: NIDS, Discriminator, GAN, or MultiTask (FUSION-MLP)')
 
     # ─── Training Session Parameters ───
     parser.add_argument("--epochs", type=int, default=5, help="Number of training epochs per round")
@@ -301,6 +364,32 @@ def parse_HFL_Host_args():
 
     parser.add_argument("--min_clients", type=int, choices=[1, 2, 3, 4, 5, 6], default=2,
                         help="Minimum number of clients required for federated training")
+
+    # ─── Fusion Centers / Communities-Crime Settings (mirrors client parser) ───
+    parser.add_argument("--commcrime_path", type=str, default=None,
+                        help="Path to the UCI Communities-Crime raw CSV. Default: $HOME/datasets/CommunitiesCrime/.")
+    parser.add_argument("--commcrime_random_seed", type=int, default=42,
+                        help="Seed for all stochastic COMMCRIME steps.")
+    parser.add_argument("--num_clients", type=int, choices=[1, 3, 5, 10], default=5,
+                        help="Number of simulated agency clients for FUSION-MLP simulation.")
+    parser.add_argument("--partition_strategy", type=str,
+                        choices=["geographic", "iid", "dirichlet"], default="geographic",
+                        help="Cross-client partition strategy. Default: geographic.")
+    parser.add_argument("--dirichlet_alpha", type=float, default=0.5,
+                        help="Dirichlet concentration for partition_strategy=dirichlet.")
+    parser.add_argument("--global_test_size", type=float, default=0.15,
+                        help="Fraction of COMMCRIME held out as the shared global test set.")
+    parser.add_argument("--escalation_loss_weight", type=float, default=0.5,
+                        help="β in L = (1-β)·CE + β·BCE for FUSION-MLP.")
+    parser.add_argument("--drop_sensitive_features",
+                        action=argparse.BooleanOptionalAction, default=True,
+                        help="Drop documented-bias columns before training. Default: True. Use --no-drop_sensitive_features for the Phase E ablation row.")
+    parser.add_argument("--fl_strategy", type=str, choices=["FedAvg", "FedProx"], default="FedAvg",
+                        help="Server-side federation strategy for FUSION-MLP.")
+    parser.add_argument("--fedprox_mu", type=float, default=0.01,
+                        help="Proximal-term coefficient when --fl_strategy=FedProx.")
+    parser.add_argument("--run_dir", type=str, default=None,
+                        help="Re-use an existing fusion-centers run dir (frozen global test split). If omitted a fresh timestamped dir is created.")
 
     # ─── Pre-trained Models (Optional) ───
     parser.add_argument('--pretrained_GAN', type=str, default=None,
@@ -356,6 +445,13 @@ def parse_HFL_Host_args():
     if args.dataset_processing in ["IOT", "IOT-MinMax"]:
         args.dataset = "IOT"
 
+    # FUSION-MLP locks the dataset and training mode (design doc §3.1).
+    if args.model_type == "FUSION-MLP":
+        args.model_training = "MultiTask"
+        args.dataset = "COMMCRIME"
+        if args.dataset_processing == "Default":
+            args.dataset_processing = "COMMCRIME"
+
     # ─── Add computed fields ───
     args.timestamp = timestamp
     args.regularizationEnabled = True
@@ -363,8 +459,11 @@ def parse_HFL_Host_args():
     args.earlyStopEnabled = None
     args.lrSchedRedEnabled = None
     args.modelCheckpointEnabled = None
-    args.evaluationLog = timestamp
-    args.trainingLog = timestamp
+    # Distinct filenames so training metrics and evaluation metrics
+    # don't get interleaved into a single bare-timestamp file (the
+    # pre-existing project pattern collapsed them together).
+    args.evaluationLog = f"{timestamp}_evaluation.log"
+    args.trainingLog = f"{timestamp}_training.log"
     args.node = 1
 
     # ─── Generate dynamic save name ───
@@ -415,6 +514,24 @@ def display_HFL_host_opening_message(args, timestamp):
     print(f"   • Minimum Clients: {args.min_clients}")
     if args.synth_portion > 0:
         print(f"   • Synthetic Data Ratio: {args.synth_portion:.1%}")
+
+    # Fusion Centers Configuration (only relevant for COMMCRIME / FUSION-MLP)
+    if args.model_type == "FUSION-MLP" or args.dataset == "COMMCRIME":
+        print("-" * 40)
+        print("🏛️  FUSION CENTERS CONFIG:")
+        print(f"   • Partition Strategy: {args.partition_strategy}")
+        print(f"   • Number of Clients (simulation): {args.num_clients}")
+        if args.partition_strategy == "dirichlet":
+            print(f"   • Dirichlet α: {args.dirichlet_alpha}")
+        print(f"   • Global Test Size: {args.global_test_size}")
+        print(f"   • Escalation Loss Weight (β): {args.escalation_loss_weight}")
+        print(f"   • Drop Sensitive Features: {args.drop_sensitive_features}")
+        print(f"   • FL Strategy: {args.fl_strategy}")
+        if args.fl_strategy == "FedProx":
+            print(f"   • FedProx μ: {args.fedprox_mu}")
+        print(f"   • Random Seed: {args.commcrime_random_seed}")
+        if args.run_dir:
+            print(f"   • Run Dir (reuse): {args.run_dir}")
 
     # Pre-trained Models Section
     if any([args.pretrained_GAN, args.pretrained_generator, args.pretrained_discriminator, args.pretrained_nids]):

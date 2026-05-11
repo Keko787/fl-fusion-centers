@@ -21,7 +21,10 @@ def hyperparameterLoading(args, X_train_data):
     save_best_only = None
     metric_to_monitor_mc = None
     checkpoint_mode = None
-    regularizationEnabled = True
+    # Honor argparse-side flag if present; default True preserves legacy
+    # behavior for callers (CICIOT / NIDS / GAN) that never wired the
+    # arg. FUSION-MLP runs honor ``--regularizationEnabled`` correctly.
+    regularizationEnabled = getattr(args, "regularizationEnabled", True)
     noise_dim = None
     num_classes = None
     latent_dim = None
@@ -145,6 +148,46 @@ def hyperparameterLoading(args, X_train_data):
         steps_per_epoch = len(X_train_data) // BATCH_SIZE
         input_dim = X_train_data.shape[1]
         learning_rate = 0.0001
+
+    elif model_type == 'FUSION-MLP':
+        # Phase B.2 — centralized + federated multi-task MLP for the
+        # fusion-centers update. Defaults locked in design doc §3.3.
+        input_dim = X_train_data.shape[1]
+        BATCH_SIZE = 128
+        steps_per_epoch = max(1, len(X_train_data) // BATCH_SIZE)
+        num_classes = 3  # violent / property / other
+        learning_rate = 1e-3
+        betas = [0.9, 0.999]
+
+        if regularizationEnabled:
+            l2_alpha = 1e-4
+
+        # Reuse the existing NIDS callback semantics — monitor val_loss
+        # for early stopping / lr schedule / checkpointing. The
+        # FUSION-MLP trainer maps these onto Keras callbacks identically
+        # to FlNidsClient.
+        if earlyStopEnabled:
+            es_patience = 5
+            restor_best_w = True
+            metric_to_monitor_es = "val_loss"
+        if lrSchedRedEnabled:
+            l2lr_patience = 3
+            metric_to_monitor_l2lr = "val_loss"
+        if modelCheckpointEnabled:
+            save_best_only = True
+            checkpoint_mode = "min"
+            metric_to_monitor_mc = "val_loss"
+
+        print("\nFUSION-MLP Hyperparameters:")
+        print("Input Dim (Feature Size):", input_dim)
+        print("Batch Size:", BATCH_SIZE)
+        print(f"Steps per epoch (max(1, {len(X_train_data)} // {BATCH_SIZE})):",
+              steps_per_epoch)
+        print("Number of Classes:", num_classes)
+        print("Learning Rate:", learning_rate)
+        print("Betas:", betas)
+        if l2_alpha is not None:
+            print("L2 Alpha:", l2_alpha)
 
     elif model_type == 'AC-GAN':
         # Modified hyperparameters for improved AC-GAN performance
