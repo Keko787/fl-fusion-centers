@@ -71,8 +71,8 @@ schema, and validates the install.
 
 ```bash
 # Clone
-git clone https://github.com/Keko787/HFL-DNN-GAN-IDS.git
-cd HFL-DNN-GAN-IDS
+git clone https://github.com/Keko787/fl-fusion-centers.git
+cd fl-fusion-centers
 
 # Linux / macOS / WSL — full setup + run the test suite to verify
 bash AppSetup/setup_fusion_node.sh --verify
@@ -83,8 +83,8 @@ source .venv/bin/activate
 
 ```powershell
 # Windows (PowerShell 7+)
-git clone https://github.com/Keko787/HFL-DNN-GAN-IDS.git
-cd HFL-DNN-GAN-IDS
+git clone https://github.com/Keko787/fl-fusion-centers.git
+cd fl-fusion-centers
 pwsh -File AppSetup\setup_fusion_node.ps1 -Verify
 & .\.venv\Scripts\Activate.ps1
 ```
