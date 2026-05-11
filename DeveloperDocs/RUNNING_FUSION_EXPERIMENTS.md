@@ -22,16 +22,21 @@ Chameleon Cloud (the design's deployment target) — see [README.md](../README.m
 
 ## 1. Data acquisition
 
-The project expects the unnormalized UCI Communities and Crime archive under `$HOME/datasets/CommunitiesCrime/`. The loader can fetch it on first run, but it is faster + more reliable to download manually:
+The project expects the unnormalized UCI Communities and Crime archive under `$HOME/datasets/CommunitiesCrime/`. UCI 2.0 stopped shipping the `.names` schema file with the dataset zip — we generate it ourselves from the canonical metadata (see implementation plan §9.1).
 
 ```bash
+# 1. Download the data file
 mkdir -p ~/datasets/CommunitiesCrime
-cd ~/datasets/CommunitiesCrime
-# URLs are the defaults baked into Config/DatasetConfig/CommunitiesCrime_Sampling/commCrimeDatasetLoad.py
-wget https://archive.ics.uci.edu/ml/machine-learning-databases/00211/CommViolPredUnnormalizedData.txt
-wget "https://archive.ics.uci.edu/ml/machine-learning-databases/00211/communities%20and%20crime%20unnormalized.names" \
-     -O communities_and_crime_unnormalized.names
+curl -L https://archive.ics.uci.edu/static/public/211/communities+and+crime+unnormalized.zip \
+    -o /tmp/comm_crime.zip
+unzip -j /tmp/comm_crime.zip CommViolPredUnnormalizedData.txt -d ~/datasets/CommunitiesCrime/
+
+# 2. Generate the .names schema via ucimlrepo (one-time)
+pip install ucimlrepo
+python -m Config.DatasetConfig.CommunitiesCrime_Sampling.generate_names_file
 ```
+
+The generator script writes `~/datasets/CommunitiesCrime/communities_and_crime_unnormalized.names` (147 attributes) in the ARFF format `parse_names_file` expects.
 
 **Validate the schema before any experiment run** — see implementation plan §9.1 + §9.2 for the URL/column-name + `.names` format risks. A 5-minute check (uses `$HOME/datasets/CommunitiesCrime/` by default; override `DATA_DIR` for a custom archive location):
 

@@ -33,24 +33,99 @@ def _make_row(murd=0, rapes=0, robb=0, assault=0,
     }
 
 
-def test_threat_class_violent_dominant():
-    df = pd.DataFrame([_make_row(murd=100, rapes=50, robb=200, assault=400)])
-    assert derive_threat_class(df).iloc[0] == 0  # violent
+def test_threat_class_per_family_zscore_assigns_correctly():
+    """Per-family z-score normalization (Phase E §9.10 fix): each
+    community gets the family it is most extreme in *relative to the
+    dataset average*, not the family with highest raw count.
+
+    Construct 3 communities where each is clearly extreme in a
+    different family while the others are at moderate / typical rates.
+    """
+    rows = [
+        # 0: violent-extreme (high violent, moderate property + arson)
+        _make_row(murd=1000, rapes=500, robb=500, assault=500,
+                  burgl=100, larc=100, autoth=100, arson=10),
+        # 1: property-extreme (high property, moderate violent + arson)
+        _make_row(murd=50, rapes=50, robb=50, assault=50,
+                  burgl=2000, larc=3000, autoth=1000, arson=10),
+        # 2: arson-extreme (high arson, moderate everything else)
+        _make_row(murd=50, rapes=50, robb=50, assault=50,
+                  burgl=100, larc=100, autoth=100, arson=500),
+    ]
+    df = pd.DataFrame(rows)
+    classes = derive_threat_class(df)
+    assert classes.iloc[0] == 0  # violent
+    assert classes.iloc[1] == 1  # property
+    assert classes.iloc[2] == 2  # other (arson)
 
 
-def test_threat_class_property_dominant():
-    df = pd.DataFrame([_make_row(burgl=500, larc=800, autoth=300, murd=5)])
-    assert derive_threat_class(df).iloc[0] == 1  # property
-
-
-def test_threat_class_other_dominant():
-    df = pd.DataFrame([_make_row(arson=200, murd=5, burgl=10)])
-    assert derive_threat_class(df).iloc[0] == 2  # other
+def test_threat_class_z_score_beats_raw_magnitude():
+    """The key correctness property: a community with HIGH violent
+    crime but ABSOLUTELY HIGHER property crime should still be labeled
+    VIOLENT, because it's extreme on violent relative to the dataset.
+    Pre-fix (per-row argmax of raw rates), this row would have been
+    labeled property — the bug that motivated this rewrite."""
+    rows = [
+        # Average community — sets the population baseline.
+        _make_row(murd=50, rapes=50, robb=50, assault=50,
+                  burgl=2000, larc=3000, autoth=1000, arson=10),
+        _make_row(murd=50, rapes=50, robb=50, assault=50,
+                  burgl=2000, larc=3000, autoth=1000, arson=10),
+        # Spike-violent community: violent is 10x average, property is
+        # exactly average (still absolutely higher than violent in raw).
+        _make_row(murd=500, rapes=500, robb=500, assault=500,
+                  burgl=2000, larc=3000, autoth=1000, arson=10),
+    ]
+    df = pd.DataFrame(rows)
+    classes = derive_threat_class(df)
+    assert classes.iloc[2] == 0, (
+        "Spike-violent community labeled wrong — z-score should beat "
+        "raw magnitude here"
+    )
 
 
 def test_threat_class_all_zero_falls_back_to_other():
-    df = pd.DataFrame([_make_row()])
-    assert derive_threat_class(df).iloc[0] == 2
+    """Rows with zero crime in every family deterministically map to
+    class 2 (other) regardless of dataset-level z-score statistics."""
+    rows = [
+        _make_row(murd=100, rapes=50, robb=100, assault=100,
+                  burgl=500, larc=600, autoth=200, arson=20),
+        _make_row(),  # all zeros
+    ]
+    df = pd.DataFrame(rows)
+    classes = derive_threat_class(df)
+    assert classes.iloc[1] == 2
+
+
+def test_threat_class_produces_balanced_distribution_on_real_like_data():
+    """Real UCI data has property rates ~10x violent and ~100x arson by
+    raw magnitude; the pre-fix per-row argmax collapsed everything to
+    class 1 (property). The z-score fix produces a non-degenerate
+    distribution across all three classes."""
+    rng = np.random.default_rng(0)
+    n = 200
+    rows = []
+    for _ in range(n):
+        # Realistic per-100k rates with random per-community emphasis.
+        rows.append(_make_row(
+            murd=rng.uniform(0, 50),
+            rapes=rng.uniform(0, 80),
+            robb=rng.uniform(0, 250),
+            assault=rng.uniform(0, 500),
+            burgl=rng.uniform(500, 2000),
+            larc=rng.uniform(1000, 3500),
+            autoth=rng.uniform(200, 1000),
+            arson=rng.uniform(0, 100),
+        ))
+    df = pd.DataFrame(rows)
+    classes = derive_threat_class(df)
+    distribution = classes.value_counts().to_dict()
+    # All three classes should be represented.
+    assert all(c in distribution for c in (0, 1, 2)), (
+        f"Single-class collapse — labels are {distribution}"
+    )
+    # No class should claim >90% of the dataset (would suggest a bias).
+    assert max(distribution.values()) < 0.9 * n
 
 
 def test_escalation_score_in_unit_interval():

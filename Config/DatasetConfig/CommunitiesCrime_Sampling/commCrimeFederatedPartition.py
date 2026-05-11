@@ -124,7 +124,7 @@ def _train_val_split(client_df: pd.DataFrame, val_frac: float,
 
 
 def _split_geographic(remaining: pd.DataFrame, num_clients: int,
-                       state_col: str = "state") -> tuple[list[pd.DataFrame], int]:
+                       state_col: str = "State") -> tuple[list[pd.DataFrame], int]:
     """Bucket rows by state into ``num_clients`` regional partitions.
 
     Returns ``(client_partitions, unmapped_count)``. ``unmapped_count``
@@ -241,7 +241,7 @@ def partition(labeled_df: pd.DataFrame,
               dirichlet_alpha: float | None = None,
               global_test_size: float = 0.15,
               val_frac: float = 0.20,
-              state_col: str = "state",
+              state_col: str = "State",
               feature_cols_for_stats: Iterable[str] | None = None,
               audit_info: dict | None = None,
               dropped_sensitive_columns: Iterable[str] | None = None) -> dict:

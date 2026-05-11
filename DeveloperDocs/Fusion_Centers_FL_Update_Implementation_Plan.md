@@ -664,19 +664,17 @@ Each phase's deliverables passed a focused code-review before the next phase sta
 
 These are items the 146-test suite **does not** cover. None are bugs in the tested code — they're risks at boundaries we deferred. The first real-data run will likely trip on at least one of 9.1–9.3.
 
-### 9.1 🔴 UCI archive download and schema unverified
+### 9.1 ✅ RESOLVED (2026-05-11) — UCI schema validated against real data
 
-- The `DEFAULT_DATA_URL` and `DEFAULT_NAMES_URL` constants in [commCrimeDatasetLoad.py](Config/DatasetConfig/CommunitiesCrime_Sampling/commCrimeDatasetLoad.py) are recollections of the UCI repository layout, **never validated by an actual fetch**.
-- The crime-rate column names (`murdPerPop`, `robbbPerPop` with three b's, etc.) and the `SENSITIVE_COLUMNS` list mirror the UCI .names file from documentation memory — **never cross-checked against the real file**. If casing or spelling differs, `clean()` silently drops nothing under those names, label engineering produces all-zero family rates → degenerate labels → useless run.
-- All tests use the synthetic stub from `make_synthetic_stub`. The stub matches the schema my loader expects, not necessarily the schema UCI ships.
+- Diagnostic run confirmed the legacy `DEFAULT_NAMES_URL` is dead (UCI 2.0 stopped shipping the `.names` file in their zip).
+- 10 of 14 `SENSITIVE_COLUMNS` names were guesses that didn't match the real UCI schema (`racepctblack` → `pctBlack`, `pctWInvInc` doesn't exist, `state` is actually `State` capital, etc.).
+- **Fix:** new `Config/DatasetConfig/CommunitiesCrime_Sampling/generate_names_file.py` fetches the canonical schema via `ucimlrepo` and writes the ARFF `.names` file our parser expects. Constants in `commCrimeDatasetLoad.py` (`SENSITIVE_COLUMNS` + `audit`'s `State`/`state` reference) corrected. Synthetic stub schema updated to mirror real UCI names.
+- **Setup procedure:** see [RUNNING_FUSION_EXPERIMENTS.md §1](RUNNING_FUSION_EXPERIMENTS.md) — `pip install ucimlrepo` + `python -m Config.DatasetConfig.CommunitiesCrime_Sampling.generate_names_file`.
+- Validated end-to-end: 2215 rows × 147 cols load cleanly, all 13 sensitive cols match, all 8 crime-rate target cols match, no missing columns.
 
-*First-real-run action:* download once manually, diff the .names file against the constants, adjust spelling/casing if needed. Loader URLs are overridable via `args.commcrime_path`.
+### 9.2 ✅ RESOLVED (2026-05-11) — `.names` file format
 
-### 9.2 🔴 `.names` file parser ARFF-format assumption
-
-`parse_names_file` matches `^@attribute\s+(\S+)` per line. If the real UCI file uses a non-ARFF format (plain list, comma-separated, different sigil), parsing returns an empty name list → `load_raw` produces a 0-column DataFrame → everything downstream crashes with a column-not-found error.
-
-*First-real-run action:* `head` the real `.names` file; if the format doesn't match, add a fallback parser branch (~10 lines).
+We now **generate** the `.names` file ourselves in the ARFF format the parser expects. Format is correct by construction (one `@attribute name type` line per variable). The ARFF-format assumption in `parse_names_file` is no longer a risk because we control the writer side.
 
 ### 9.3 🔴 Real-data DoD criteria never verified
 
@@ -726,9 +724,40 @@ The implication: the stub is fine for plumbing tests but **doesn't quantify** th
 
 Flower 1.29 supports `fl.simulation.start_simulation` but emits a deprecation warning recommending `fl.simulation.run_simulation` with `ServerAppComponents`. Logs will be noisy. Migration deferred — see §3 Phase D Build outcome.
 
+### 9.10 ✅ RESOLVED (2026-05-11) — `threat_class` balanced via per-family z-score
+
+**The bug:** Phase A `derive_threat_class` used per-row argmax over raw `*PerPop` rates. Property rates (~3000–4500/100k) always dwarf violent (~300–800/100k) and arson (~20–50/100k) by absolute magnitude, so the argmax always picked property. Real UCI run produced `threat_class.value_counts() == {1: 1902}` — single-class collapse, classifier macro-F1 trivially 1.0.
+
+**The fix:** Option 1 from the original three — per-family z-score normalization across the dataset:
+
+```
+z_family[i] = (rate_family[i] − rate_family.mean()) / rate_family.std()
+class[i]    = argmax_family(z_family[i])
+```
+
+A community is now labeled by the family it's most extreme in *relative to the dataset average*, not the family with the highest raw count. ~10 LOC change in `derive_threat_class` (see [commCrimeLabelEngineering.py](Config/DatasetConfig/CommunitiesCrime_Sampling/commCrimeLabelEngineering.py)).
+
+**Validation against real UCI data (1902 rows after cleaning):**
+
+| Class | Count | % |
+|---|---|---|
+| 0 (violent) | 504 | 26.5% |
+| 1 (property) | 623 | 32.8% |
+| 2 (other / arson) | 775 | 40.7% |
+
+Non-degenerate 3-class problem; classifier has a real target.
+
+**Test coverage:** old single-row "dominant family" tests removed (they tested the broken semantics); replaced with four new tests in `test_fusion_label_engineering.py`:
+* `test_threat_class_per_family_zscore_assigns_correctly` — three hand-crafted communities each extreme in a different family
+* `test_threat_class_z_score_beats_raw_magnitude` — the property-vs-violent edge case the old version failed
+* `test_threat_class_all_zero_falls_back_to_other` — the explicit fallback path
+* `test_threat_class_produces_balanced_distribution_on_real_like_data` — random realistic-rate dataset produces balanced multi-class output
+
+**Edge cases handled:** single-row input (std=0, all z scores = 0, argmax picks index 0 deterministically — only relevant for unit tests), zero-variance family (treated as z=0 for that family), all-zero crime rates (remapped to class 2 / other for consistency with prior behavior).
+
 ---
 
 *Last Updated: 2026-05-11*
 *Status: All phases (0, A, B, C, D, E) closed — 183 tests passing*
-*Known untested boundaries documented in §9 — read before first real-data run*
+*Real-data shakedown 2026-05-11: §9.1 (UCI URLs/schema), §9.2 (.names format), §9.10 (label-collapse) all ✅ RESOLVED. Pipeline produces balanced 3-class labels (26.5%/32.8%/40.7%) on real UCI data.*
 *Operational runbook: [RUNNING_FUSION_EXPERIMENTS.md](RUNNING_FUSION_EXPERIMENTS.md)*

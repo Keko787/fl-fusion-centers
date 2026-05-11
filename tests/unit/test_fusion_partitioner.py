@@ -154,15 +154,16 @@ def test_geographic_partition_produces_real_class_skew():
     partitioning all classes are mixed across clients. This is the
     real non-IID property outline §6.7 expects from geographic splits.
     """
-    # FIPS codes spanning all 5 N=5 buckets: CA(6)=4, FL(12)=1, IL(17)=2,
-    # NY(36)=0, TX(48)=3. Construct a frame where each region is
-    # dominated by exactly one threat class.
+    # Postal codes spanning all 5 N=5 buckets: NY=0, FL=1, IL=2, TX=3, CA=4.
+    # Real UCI uses 2-letter postal abbreviations as strings (matching the
+    # ``State`` column from ucimlrepo); the partitioner's string-mapping
+    # branch handles this.
     rows = []
-    region_state = {0: 36, 1: 12, 2: 17, 3: 48, 4: 6}  # bucket → FIPS
-    for bucket, fips in region_state.items():
+    region_state = {0: "NY", 1: "FL", 2: "IL", 3: "TX", 4: "CA"}
+    for bucket, postal in region_state.items():
         for _ in range(40):  # 40 rows per region
             rows.append({
-                "state": fips,
+                "State": postal,
                 # Crime-rate columns aren't used here; threat_class is
                 # assigned directly to make the test independent of label
                 # engineering.
@@ -195,17 +196,16 @@ def test_geographic_partition_produces_real_class_skew():
 # ───────────────────────────────────────────────────────────────────────
 
 def test_geographic_handles_nan_state_codes(tmp_path):
-    """A NaN in `state` coerces the column to float64; the FIPS lookup
-    must still resolve the rows whose state IS present and route NaN
-    rows through the unknown-state round-robin fallback."""
+    """A NaN in the State column must not regress to "every state silently
+    becomes unknown" — the loader's notna mask plus the round-robin
+    fallback should still route the NaN rows somewhere."""
     csv = make_synthetic_stub(tmp_path / "stub.csv", n_rows=200, seed=11)
     names = parse_names_file(stub_names_file(tmp_path / "stub.names"))
     labeled = engineer_labels(clean(load_raw(csv, names), drop_sensitive=True))
 
-    # Knock out the state column on 10% of rows so the column coerces to
-    # float64. Real UCI data shouldn't trigger this but the loader must
-    # not regress to "every state silently becomes unknown".
-    labeled.loc[labeled.sample(frac=0.1, random_state=0).index, "state"] = np.nan
+    # Knock out the State column on 10% of rows. Real UCI data shouldn't
+    # trigger this but the partitioner must not regress.
+    labeled.loc[labeled.sample(frac=0.1, random_state=0).index, "State"] = np.nan
 
     parts = partition(labeled, strategy="geographic", num_clients=5,
                       seed=42, run_dir=tmp_path / "run")

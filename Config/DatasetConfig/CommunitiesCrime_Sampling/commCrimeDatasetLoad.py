@@ -44,13 +44,19 @@ ID_COLUMNS: tuple[str, ...] = (
 # Sensitive demographic columns dropped when ``drop_sensitive=True``
 # (the default per design doc §8.4, the Phase 0 locked decision).
 #
+# Column names match the real UCI Communities and Crime Unnormalized
+# schema (147 attributes) as exposed by :mod:`ucimlrepo`. The
+# pre-shakedown Phase A taxonomy used my best-recollection names
+# (e.g., ``racepctblack``); Phase E post-shakedown corrected them
+# against the canonical metadata.
+#
 # Taxonomy:
-#   * Race/ethnicity share (4 cols): racepctblack, racePctWhite,
-#     racePctAsian, racePctHisp.
+#   * Race/ethnicity share (4 cols): pctBlack, pctWhite, pctAsian, pctHisp.
 #   * Per-capita income broken down by race (6 cols): whitePerCap,
-#     blackPerCap, indianPerCap, AsianPerCap, OtherPerCap, HispPerCap.
-#   * Aggregate income / public-assistance indicators (4 cols):
-#     medIncome, perCapInc, pctWInvInc, pctWPubAsst.
+#     blackPerCap, NAperCap (Native American), asianPerCap, otherPerCap,
+#     hispPerCap.
+#   * Aggregate income / public-assistance indicators (3 cols):
+#     medIncome, perCapInc, pctPubAsst.
 #
 # The first two buckets are the obvious race/ethnicity columns. The
 # third bucket is included because outline §5.3 calls out "race,
@@ -65,12 +71,12 @@ ID_COLUMNS: tuple[str, ...] = (
 # silently so the loader keeps working if UCI revises the schema.
 SENSITIVE_COLUMNS: tuple[str, ...] = (
     # Race/ethnicity share
-    "racepctblack", "racePctWhite", "racePctAsian", "racePctHisp",
+    "pctBlack", "pctWhite", "pctAsian", "pctHisp",
     # Per-capita income by race (proxy for race/ethnicity)
-    "whitePerCap", "blackPerCap", "indianPerCap", "AsianPerCap",
-    "OtherPerCap", "HispPerCap",
+    "whitePerCap", "blackPerCap", "NAperCap", "asianPerCap",
+    "otherPerCap", "hispPerCap",
     # Aggregate income / public-assistance indicators
-    "medIncome", "perCapInc", "pctWInvInc", "pctWPubAsst",
+    "medIncome", "perCapInc", "pctPubAsst",
 )
 
 # Crime-rate columns required for label engineering. Engineering will
@@ -155,7 +161,7 @@ def audit(df: pd.DataFrame) -> dict:
     Returned dict is JSON-serializable so it can be dropped into
     ``partition_stats.json`` under an ``audit`` key.
     """
-    state_col = df["state"] if "state" in df.columns else None
+    state_col = df["State"] if "State" in df.columns else None
     return {
         "n_rows": int(len(df)),
         "n_cols": int(df.shape[1]),
@@ -203,22 +209,38 @@ def clean(df: pd.DataFrame,
 #   Phase 1.5 — Synthetic stub (offline tests)
 # ───────────────────────────────────────────────────────────────────────
 
-# Minimal column set that the downstream pipeline expects. Includes
-# ``state`` (for partitioning), the crime-rate columns (for label
-# engineering), and a handful of feature columns so scaling is non-trivial.
+# Minimal column set that the downstream pipeline expects. Mirrors the
+# real UCI schema for the columns the fusion-centers pipeline touches:
+# the ID block, ``State`` (partitioning), the SENSITIVE_COLUMNS list
+# (so the drop-sensitive logic has something to drop), a handful of
+# generic feature columns, and the full CRIME_RATE_COLUMNS list (for
+# label engineering). Names match :data:`ucimlrepo.fetch_ucirepo(id=211).variables`.
 _STUB_COLUMNS: tuple[str, ...] = (
-    "communityname", "state", "countyCode", "communityCode", "fold",
-    "population", "householdsize", "racepctblack", "racePctWhite",
-    "agePct12t21", "agePct65up", "medIncome", "pctWInvInc",
-    "PctUnemployed", "PctEmploy", "PctIlleg", "PctLargHouseFam",
-    "HousVacant", "PctHousOccup", "MedRent", "NumStreet",
+    # ID block (5)
+    "communityname", "State", "countyCode", "communityCode", "fold",
+    # Generic features (2)
+    "pop", "perHoush",
+    # Race/ethnicity share — part of SENSITIVE_COLUMNS (4)
+    "pctBlack", "pctWhite", "pctAsian", "pctHisp",
+    # Age features (2) — kept as generic features
+    "pct12-21", "pct65up",
+    # Aggregate income / public-assistance — part of SENSITIVE_COLUMNS (3)
+    "medIncome", "perCapInc", "pctPubAsst",
+    # Per-capita income by race — part of SENSITIVE_COLUMNS (6)
+    "whitePerCap", "blackPerCap", "NAperCap", "asianPerCap",
+    "otherPerCap", "hispPerCap",
+    # Misc features so scaling has variance (4)
+    "pctUnemploy", "pctEmploy", "MedRent", "NumStreet",
+    # Crime targets (8 — match CRIME_RATE_COLUMNS exactly)
     *CRIME_RATE_COLUMNS,
 )
 
-# FIPS state codes that match the partitioner's region buckets; the
-# stub deliberately spans all 5 N=5 regions so geographic partitioning
-# is testable end-to-end on the stub alone.
-_STUB_STATE_CODES = (6, 12, 17, 36, 48, 25, 39, 13, 51, 22)  # CA, FL, IL, NY, TX, MA, OH, GA, VA, LA
+# Postal state abbreviations matching the real UCI data format (the
+# ``State`` column is a 2-letter string, not a FIPS numeric). The
+# stub deliberately spans all 5 N=5 regional buckets so geographic
+# partitioning is testable end-to-end on the stub alone.
+_STUB_STATE_POSTALS = ("CA", "FL", "IL", "NY", "TX",
+                        "MA", "OH", "GA", "VA", "LA")
 
 
 def make_synthetic_stub(out_path: os.PathLike | str,
@@ -228,7 +250,9 @@ def make_synthetic_stub(out_path: os.PathLike | str,
 
     Used by Phase A unit + integration tests. Not a realistic dataset —
     just enough columns and structure for the loader → label engineer →
-    partitioner pipeline to exercise every code path offline.
+    partitioner pipeline to exercise every code path offline. The
+    ``State`` column uses 2-letter postal abbreviations as strings
+    (matching the real UCI format).
     """
     out_path = Path(out_path)
     out_path.parent.mkdir(parents=True, exist_ok=True)
@@ -238,11 +262,11 @@ def make_synthetic_stub(out_path: os.PathLike | str,
     n_features = len(_STUB_COLUMNS) - 5 - len(CRIME_RATE_COLUMNS)
     feature_block = rng.uniform(0.0, 1.0, size=(n_rows, n_features))
     crime_block = rng.uniform(0.0, 5000.0, size=(n_rows, len(CRIME_RATE_COLUMNS)))
-    states = rng.choice(_STUB_STATE_CODES, size=n_rows)
+    states = rng.choice(_STUB_STATE_POSTALS, size=n_rows)
 
     df = pd.DataFrame({
         "communityname": [f"stub_city_{i:04d}" for i in range(n_rows)],
-        "state": states,
+        "State": states,
         "countyCode": rng.integers(1, 999, size=n_rows),
         "communityCode": rng.integers(1, 99999, size=n_rows),
         "fold": rng.integers(1, 11, size=n_rows),

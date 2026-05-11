@@ -46,27 +46,56 @@ def _family_rate(df: pd.DataFrame, cols: tuple[str, ...]) -> pd.Series:
 
 
 def derive_threat_class(df: pd.DataFrame) -> pd.Series:
-    """Per-row dominant crime family (0=violent, 1=property, 2=other).
+    """Per-row dominant crime family (0=violent, 1=property, 2=other) using
+    **per-family z-score normalization across the dataset**.
 
-    Rows where all three family rates are zero (or NaN) get class 2
-    ("other") as a deterministic fallback. ``clean()`` drops rows
-    missing crime targets before this is called, so all-zero rows are
-    rare but possible.
+    A community is labeled by the family it is most extreme in *relative
+    to the other communities*, not the family with the highest raw count
+    in that row. This is the correct interpretation of outline §6.4's
+    "normalized rates":
+
+        z_family[i] = (rate_family[i] − rate_family.mean()) / rate_family.std()
+        class[i]    = argmax_family(z_family[i])
+
+    Why this matters (Phase E real-data shakedown, plan §9.10): typical
+    per-100k crime rates make property crime always dominant by raw
+    magnitude (larceny + burglary + auto theft ≈ 3000–4500/100k vs
+    violent ≈ 300–800/100k vs arson ≈ 20–50/100k). A naive per-row
+    argmax of raw rates labels every community as "property" → useless
+    classifier. The per-family z-score lets each family compete on its
+    own scale.
+
+    Edge cases:
+      * **Single-row input** (or zero-variance family): std = 0 →
+        z-score returns 0 for that family, the argmax tiebreaks to the
+        first index. Caller should ensure ≥ 2 rows for meaningful
+        classification; this is only relevant for unit tests.
+      * **All-zero crime rates**: the per-family means are still
+        defined; z-score for an all-zero row is negative for every
+        family. To match the prior behavior and keep "no crime data"
+        labeling explicit, all-zero rows are remapped to class 2
+        ("other") rather than letting argmax pick by tiebreak.
     """
     violent = _family_rate(df, VIOLENT_RATE_COLS)
     property_ = _family_rate(df, PROPERTY_RATE_COLS)
     other = _family_rate(df, OTHER_RATE_COLS)
 
-    stacked = np.column_stack([violent.to_numpy(),
-                                property_.to_numpy(),
-                                other.to_numpy()])
-    totals = stacked.sum(axis=1, keepdims=True)
-    safe_totals = np.where(totals > 0, totals, 1.0)
-    normalized = stacked / safe_totals
-    classes = normalized.argmax(axis=1)
-    # All-zero rows: argmax returns 0; remap to 2 (other) so the fallback
-    # is explicit and doesn't bias the violent class.
-    classes = np.where(totals.squeeze() > 0, classes, 2)
+    def _zscore(s: pd.Series) -> np.ndarray:
+        std = float(s.std())
+        if std < 1e-12:
+            return np.zeros(len(s), dtype=np.float64)
+        return ((s - float(s.mean())) / std).to_numpy()
+
+    stacked = np.column_stack([
+        _zscore(violent),
+        _zscore(property_),
+        _zscore(other),
+    ])
+    classes = stacked.argmax(axis=1)
+
+    # All-zero crime-rate rows: deterministic fallback to class 2 (other).
+    totals = (violent.to_numpy() + property_.to_numpy() + other.to_numpy())
+    classes = np.where(totals > 0, classes, 2)
     return pd.Series(classes.astype(np.int64), index=df.index, name="threat_class")
 
 

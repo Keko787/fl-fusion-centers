@@ -34,7 +34,13 @@ def _make_args(tmp_path: Path, *,
                partition_strategy: str = "iid",
                drop_sensitive_features: bool = True,
                mode: str = "legacy") -> SimpleNamespace:
-    """Build a SimpleNamespace mirroring the argparse output for COMMCRIME runs."""
+    """Build a SimpleNamespace mirroring the argparse output for COMMCRIME runs.
+
+    If ``run_dir`` is None, defaults to ``tmp_path / "auto_run"`` so the
+    dispatcher's reproducibility artifacts stay hermetic per-test. The
+    "no run_dir → CWD-relative timestamped dir" path is tested separately
+    via :func:`test_no_run_dir_creates_fresh_timestamped_dir`.
+    """
     csv = make_synthetic_stub(tmp_path / "stub.csv", n_rows=300, seed=7)
     stub_names_file(tmp_path / "stub.names")
     # The stub .names file sits next to the data file by default; load_commcrime
@@ -55,7 +61,7 @@ def _make_args(tmp_path: Path, *,
         global_test_size=0.15,
         drop_sensitive_features=drop_sensitive_features,
         dataset_processing="COMMCRIME",
-        run_dir=run_dir,
+        run_dir=run_dir if run_dir is not None else str(tmp_path / "auto_run"),
         # argparse normally sets these; mirror it so the dispatcher's
         # log re-routing has something to operate on.
         evaluationLog="20260510_120000_evaluation.log",
@@ -125,6 +131,7 @@ def test_no_run_dir_creates_fresh_timestamped_dir(tmp_path, monkeypatch):
     """When --run_dir is None, fall back to results/commcrime_run_<timestamp>/."""
     monkeypatch.chdir(tmp_path)  # results/ is created under CWD
     args = _make_args(tmp_path, run_dir=None)
+    args.run_dir = None  # override _make_args' hermetic default to exercise auto-create
     load_commcrime(args)
     auto_dir = Path(args.run_dir)
     assert auto_dir.exists()
@@ -171,17 +178,18 @@ def test_audit_info_in_partition_stats(tmp_path):
 # ───────────────────────────────────────────────────────────────────────
 
 def test_dispatcher_records_dropped_sensitive_columns_default(tmp_path):
-    """Default --drop_sensitive_features=True → at least the columns the
-    synthetic stub contains from SENSITIVE_COLUMNS are recorded."""
+    """Default --drop_sensitive_features=True → the SENSITIVE_COLUMNS the
+    synthetic stub carries land in the dropped list."""
     args = _make_args(tmp_path, run_dir=str(tmp_path / "run"),
                        drop_sensitive_features=True)
     load_commcrime(args)
     stats = json.loads(Path(args.run_dir, "partition_stats.json").read_text())
     dropped = stats["dropped_sensitive_columns"]
-    # Stub includes racepctblack, racePctWhite, medIncome, pctWInvInc;
-    # those should all be in the dropped list.
-    assert "racepctblack" in dropped
+    # Stub mirrors the real UCI schema names (Phase E post-shakedown fix):
+    # pctBlack, pctWhite, medIncome, pctPubAsst, whitePerCap, ...
+    assert "pctBlack" in dropped
     assert "medIncome" in dropped
+    assert "whitePerCap" in dropped
 
 
 def test_dispatcher_records_empty_dropped_when_keep_sensitive(tmp_path):

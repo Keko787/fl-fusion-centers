@@ -25,7 +25,7 @@ def preprocess_communities_crime(client_train_df: pd.DataFrame,
                                   global_test_df: pd.DataFrame,
                                   mode: str = "COMMCRIME",
                                   scaler_path: str | None = None,
-                                  state_col: str = "state",
+                                  state_col: str = "State",
                                   label_class_col: str = "threat_class",
                                   label_escalation_col: str = "escalation_score"):
     """Scale features + split labels for the fusion-centers data path.
@@ -97,7 +97,7 @@ def _scaler_for_mode(mode: str):
 def fit_global_scaler(client_train_dfs: Iterable[pd.DataFrame],
                        run_dir: str,
                        mode: str = "COMMCRIME",
-                       state_col: str = "state",
+                       state_col: str = "State",
                        label_class_col: str = "threat_class",
                        label_escalation_col: str = "escalation_score") -> Path:
     """Fit one scaler on the union of all client training partitions.
