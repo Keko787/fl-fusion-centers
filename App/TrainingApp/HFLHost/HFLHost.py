@@ -6,7 +6,17 @@ import sys
 import os
 from datetime import datetime
 import argparse
-sys.path.append(os.path.abspath('../../..'))
+
+# Anchor the project root to __file__, not the CWD. The legacy
+# ``os.path.abspath('../../..')`` only worked when this script was
+# launched from its own directory; running from the repo root (or any
+# other CWD) resolved to "/" on Linux and silently produced a broken
+# sys.path, causing ``ModuleNotFoundError: No module named 'Config'``.
+_PROJECT_ROOT = os.path.abspath(
+    os.path.join(os.path.dirname(__file__), '..', '..', '..')
+)
+if _PROJECT_ROOT not in sys.path:
+    sys.path.insert(0, _PROJECT_ROOT)
 
 # TensorFlow & Flower
 if 'TF_USE_LEGACY_KERAS' in os.environ:
