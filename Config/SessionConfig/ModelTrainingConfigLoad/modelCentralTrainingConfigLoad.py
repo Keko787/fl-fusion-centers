@@ -28,7 +28,30 @@ os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 from sklearn.model_selection import train_test_split
 from sklearn.utils import shuffle
 
-from Config.ModelTrainingConfig.ClientModelTrainingConfig.CentralTrainingConfig.NIDS.nidsModelCentralTrainingConfig import CentralNidsClient, recordConfig
+# Legacy NIDS trainer depends on tensorflow_privacy, which is incompatible
+# with TF 2.21 used by the Fusion Centers stack. Defer the import so the
+# FUSION-MLP code path stays runnable on a fusion-only install. The
+# symbol becomes a sentinel that raises a clear error iff someone
+# actually selects --model_type NIDS.
+try:
+    from Config.ModelTrainingConfig.ClientModelTrainingConfig.CentralTrainingConfig.NIDS.nidsModelCentralTrainingConfig import CentralNidsClient, recordConfig
+    _LEGACY_NIDS_CENTRAL_AVAILABLE = True
+    _LEGACY_NIDS_CENTRAL_ERROR = None
+except ImportError as _nids_central_import_error:
+    _LEGACY_NIDS_CENTRAL_AVAILABLE = False
+    _LEGACY_NIDS_CENTRAL_ERROR = str(_nids_central_import_error)
+
+    def _legacy_nids_central_unavailable(*_args, **_kwargs):
+        raise ImportError(
+            "Legacy NIDS centralized trainer requires tensorflow_privacy. "
+            "Install AppSetup/requirements_core.txt for the NIDS code path "
+            "(note: this pins TF to 2.15 and is incompatible with the Fusion "
+            f"Centers stack). Original import error: {_LEGACY_NIDS_CENTRAL_ERROR}"
+        )
+
+    CentralNidsClient = _legacy_nids_central_unavailable
+    recordConfig = _legacy_nids_central_unavailable
+
 from Config.ModelTrainingConfig.ClientModelTrainingConfig.CentralTrainingConfig.GAN.Generator.generatorModelCentralTrainingConfig import CentralGenerator
 from Config.ModelTrainingConfig.ClientModelTrainingConfig.CentralTrainingConfig.GAN.Discriminator.discriminatorBinaryCentralTrainingConfig import CentralBinaryDiscriminator
 from Config.ModelTrainingConfig.ClientModelTrainingConfig.CentralTrainingConfig.GAN.FullModel.GANBinaryCentralTrainingConfig import CentralBinaryGan

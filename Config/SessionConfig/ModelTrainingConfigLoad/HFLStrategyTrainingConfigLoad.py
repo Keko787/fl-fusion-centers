@@ -12,13 +12,39 @@ import flwr as fl
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 
 
+# Legacy server-side strategies that transitively depend on
+# tensorflow_privacy (ServerSaveOnlyConfig and ServerNIDSFitOnEndConfig
+# both import it). Defer them so the FUSION-MLP code path — which uses
+# the early dispatch in HFLHost.py to run_fusion_simulation — can import
+# this module on a fusion-only install. Sentinels raise a clear error
+# only if someone actually selects the legacy strategy.
+
+def _make_legacy_unavailable(name: str, error: str):
+    def _raiser(*_args, **_kwargs):
+        raise ImportError(
+            f"Legacy server strategy '{name}' requires tensorflow_privacy. "
+            f"Install AppSetup/requirements_core.txt for the NIDS code path "
+            f"(note: this pins TF to 2.15 and is incompatible with the Fusion "
+            f"Centers stack). Original import error: {error}"
+        )
+    return _raiser
+
+
 # Load and Saving Configs
-from Config.ModelTrainingConfig.HostModelTrainingConfig.ModelManagement.ServerSaveOnlyConfig import SaveModelFedAvg
+try:
+    from Config.ModelTrainingConfig.HostModelTrainingConfig.ModelManagement.ServerSaveOnlyConfig import SaveModelFedAvg
+except ImportError as _e:
+    SaveModelFedAvg = _make_legacy_unavailable("SaveModelFedAvg", str(_e))
+
 from Config.ModelTrainingConfig.HostModelTrainingConfig.ModelManagement.ServerLoadOnlyConfig import LoadModelFedAvg
 from Config.ModelTrainingConfig.HostModelTrainingConfig.ModelManagement.ServerLoadNSaveConfig import LoadSaveModelFedAvg
 
 # Fit on End configs
-from Config.ModelTrainingConfig.HostModelTrainingConfig.FitOnEnd.NIDS.ServerNIDSFitOnEndConfig import NIDSFitOnEndStrategy
+try:
+    from Config.ModelTrainingConfig.HostModelTrainingConfig.FitOnEnd.NIDS.ServerNIDSFitOnEndConfig import NIDSFitOnEndStrategy
+except ImportError as _e:
+    NIDSFitOnEndStrategy = _make_legacy_unavailable("NIDSFitOnEndStrategy", str(_e))
+
 from Config.ModelTrainingConfig.HostModelTrainingConfig.FitOnEnd.Discriminator.ServerDiscBinaryFitOnEndConfig import DiscriminatorSyntheticStrategy
 from Config.ModelTrainingConfig.HostModelTrainingConfig.FitOnEnd.Discriminator.ServerWDiscFitOnEndConfig import WDiscriminatorSyntheticStrategy
 from Config.ModelTrainingConfig.HostModelTrainingConfig.FitOnEnd.Discriminator.ServerACDiscBothFitOnEndConfig import ACDiscriminatorSyntheticStrategy

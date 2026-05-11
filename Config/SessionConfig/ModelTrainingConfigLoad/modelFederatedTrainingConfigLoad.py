@@ -28,7 +28,27 @@ os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 from sklearn.model_selection import train_test_split
 from sklearn.utils import shuffle
 
-from Config.ModelTrainingConfig.ClientModelTrainingConfig.HFLClientModelTrainingConfig.NIDS.NIDSModelClientConfig import FlNidsClient
+# Legacy FlNidsClient depends on tensorflow_privacy, which is incompatible
+# with TF 2.21 used by the Fusion Centers stack. Defer the import so the
+# FUSION-MLP code path stays runnable on a fusion-only install.
+try:
+    from Config.ModelTrainingConfig.ClientModelTrainingConfig.HFLClientModelTrainingConfig.NIDS.NIDSModelClientConfig import FlNidsClient
+    _LEGACY_NIDS_FL_AVAILABLE = True
+    _LEGACY_NIDS_FL_ERROR = None
+except ImportError as _nids_fl_import_error:
+    _LEGACY_NIDS_FL_AVAILABLE = False
+    _LEGACY_NIDS_FL_ERROR = str(_nids_fl_import_error)
+
+    def _legacy_nids_fl_unavailable(*_args, **_kwargs):
+        raise ImportError(
+            "Legacy NIDS federated client requires tensorflow_privacy. "
+            "Install AppSetup/requirements_core.txt for the NIDS code path "
+            "(note: this pins TF to 2.15 and is incompatible with the Fusion "
+            f"Centers stack). Original import error: {_LEGACY_NIDS_FL_ERROR}"
+        )
+
+    FlNidsClient = _legacy_nids_fl_unavailable
+
 from Config.ModelTrainingConfig.ClientModelTrainingConfig.HFLClientModelTrainingConfig.GAN.FullModel.GANBinaryModelClientConfig import GanBinaryClient
 from Config.ModelTrainingConfig.ClientModelTrainingConfig.HFLClientModelTrainingConfig.GAN.Discriminator.DiscBinaryModelClientConfig import BinaryDiscriminatorClient
 from Config.ModelTrainingConfig.ClientModelTrainingConfig.HFLClientModelTrainingConfig.GAN.Generator.GenModelClientConfig import GeneratorClient
