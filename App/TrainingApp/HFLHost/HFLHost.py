@@ -71,15 +71,22 @@ def main():
         _run_hermes_main(args)
         return
 
-    # FUSION-MLP dispatches to the single-node Flower simulation runner
-    # before the legacy server-strategy machinery (Phase C.5). The
-    # simulation runner owns its own data load, strategy, and client
-    # factory — none of the legacy server-side strategies apply.
+    # FUSION-MLP: simulation by default, real Flower server with --distributed.
+    # Simulation owns its own data load, strategy, and client factory —
+    # none of the legacy server-side strategies apply. The distributed
+    # runner only binds the server and reuses the strategy/init helpers;
+    # each client is its own TrainingClient.py --trainingArea Federated.
     if args.model_type == "FUSION-MLP":
-        from Config.ModelTrainingConfig.HostModelTrainingConfig.FusionCenters.SimulationRunner import (
-            run_fusion_simulation,
-        )
-        run_fusion_simulation(args)
+        if getattr(args, "distributed", False):
+            from Config.ModelTrainingConfig.HostModelTrainingConfig.FusionCenters.DistributedRunner import (
+                run_fusion_distributed_server,
+            )
+            run_fusion_distributed_server(args)
+        else:
+            from Config.ModelTrainingConfig.HostModelTrainingConfig.FusionCenters.SimulationRunner import (
+                run_fusion_simulation,
+            )
+            run_fusion_simulation(args)
         return
 
     print("MODE=legacy; running Flower server")

@@ -390,6 +390,8 @@ def parse_HFL_Host_args():
                         help="Proximal-term coefficient when --fl_strategy=FedProx.")
     parser.add_argument("--run_dir", type=str, default=None,
                         help="Re-use an existing fusion-centers run dir (frozen global test split). If omitted a fresh timestamped dir is created.")
+    parser.add_argument('--distributed', action='store_true',
+                        help='FUSION-MLP: bind a real Flower server on [::]:8080 so clients on other machines can connect (TrainingClient.py --trainingArea Federated). Without this flag FUSION-MLP runs single-process via fl.simulation.start_simulation.')
 
     # ─── Pre-trained Models (Optional) ───
     parser.add_argument('--pretrained_GAN', type=str, default=None,
