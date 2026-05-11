@@ -18,6 +18,48 @@ The Phase 0–D work shipped a complete fusion-centers pipeline + 146-test suite
 
 Chameleon Cloud (the design's deployment target) — see [README.md](../README.md) for AERPAW / Chameleon provisioning scripts. The fusion-centers experiments use the existing CPU-bare-metal pattern; outline §7.3 confirms compute is not the bottleneck.
 
+### 0.1 One-shot deploy to a fresh node
+
+For a clean machine (laptop, VM, Chameleon bare-metal, container), use the
+fusion-centers bootstrap script under [`AppSetup/`](../AppSetup/). It
+creates a local venv, installs [`requirements_fusion.txt`](../AppSetup/requirements_fusion.txt)
+(a minimal pinned set, distinct from the legacy NIDS `requirements_core.txt`),
+downloads the UCI archive into `$HOME/datasets/CommunitiesCrime/`,
+generates the `.names` schema, and validates that all crime-rate columns
+are present. Re-runs are idempotent.
+
+```bash
+# Linux / macOS / WSL
+bash AppSetup/setup_fusion_node.sh            # install + dataset
+bash AppSetup/setup_fusion_node.sh --verify   # also run pytest tests/unit -k fusion
+```
+
+```powershell
+# Windows (PowerShell 7+)
+pwsh -File AppSetup\setup_fusion_node.ps1
+pwsh -File AppSetup\setup_fusion_node.ps1 -Verify
+```
+
+If you'd rather ship a container, build the slim image:
+
+```bash
+docker build -t fusion-centers -f AppSetup/DockerSetup/Dockerfile.fusion .
+docker run --rm -v "$PWD/results:/app/results" fusion-centers \
+    python App/TrainingApp/Client/TrainingClient.py \
+        --model_type FUSION-MLP --trainingArea Central \
+        --partition_strategy iid --num_clients 1 --client_id 0 \
+        --epochs 50 --run_dir results/exp1_centralized \
+        --save_name centralized_baseline
+```
+
+The image bakes the dataset in at build time and runs a schema smoke
+check during the build, so every container starts from an identical,
+validated state. If you'd rather mount the dataset, drop the `RUN curl`
+block from the Dockerfile and pass `-v /host/datasets:/root/datasets`.
+
+If you've used the bootstrap above, you can **skip §1 entirely** — the
+script does it for you. §1 stays below for the manual-install case.
+
 ---
 
 ## 1. Data acquisition
