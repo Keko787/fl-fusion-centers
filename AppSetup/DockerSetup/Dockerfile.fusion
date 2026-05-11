@@ -1,0 +1,103 @@
+# Dockerfile.fusion — Fusion Centers FL Update node image.
+#
+# Builds a slim Python 3.11 image with the fusion-centers stack +
+# UCI Communities and Crime dataset pre-staged at /data/CommunitiesCrime/.
+# The same image can run as a centralized trainer (TrainingClient.py)
+# or as the Flower simulation host (HFLHost.py) — pick the entry point
+# at `docker run` time, e.g.:
+#
+#   docker build -t fusion-centers -f AppSetup/DockerSetup/Dockerfile.fusion .
+#
+#   # Centralized:
+#   docker run --rm -v "$PWD/results:/app/results" fusion-centers \
+#       python App/TrainingApp/Client/TrainingClient.py \
+#           --model_type FUSION-MLP --trainingArea Central \
+#           --partition_strategy iid --num_clients 1 --client_id 0 \
+#           --epochs 50 --run_dir results/exp1_centralized \
+#           --save_name centralized_baseline
+#
+#   # Federated:
+#   docker run --rm -v "$PWD/results:/app/results" fusion-centers \
+#       python App/TrainingApp/HFLHost/HFLHost.py \
+#           --model_type FUSION-MLP --fl_strategy FedAvg \
+#           --partition_strategy geographic --num_clients 5 \
+#           --rounds 100 --epochs 1 --min_clients 5 \
+#           --run_dir results/exp4_fedavg_geo \
+#           --save_name fedavg_geo_n5
+#
+# NOTE: this image bakes the dataset in at build time so every node
+# starts identical. If you'd rather mount the dataset, drop the
+# DATA-FETCH stage and pass `-v /host/datasets:/root/datasets`.
+
+FROM python:3.11-slim AS base
+
+LABEL org.opencontainers.image.title="fl-fusion-centers"
+LABEL org.opencontainers.image.description="Fusion Centers FL Update — federated multi-task MLP on UCI Communities and Crime"
+LABEL org.opencontainers.image.source="https://github.com/keko787/HFL-DNN-GAN-IDS"
+
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    # The pipeline reads $HOME/datasets/CommunitiesCrime/ by default.
+    HOME=/root
+
+WORKDIR /app
+
+# ── System packages ─────────────────────────────────────────────────────
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends \
+        curl unzip ca-certificates \
+ && rm -rf /var/lib/apt/lists/*
+
+# ── Python deps (cached layer) ──────────────────────────────────────────
+COPY AppSetup/requirements_fusion.txt /tmp/requirements_fusion.txt
+RUN pip install --upgrade pip wheel setuptools \
+ && pip install -r /tmp/requirements_fusion.txt \
+ && rm /tmp/requirements_fusion.txt
+
+# ── Project code ────────────────────────────────────────────────────────
+# Copy the bits the fusion-centers code path actually needs.
+COPY App/ /app/App/
+COPY Config/ /app/Config/
+COPY Analysis/ /app/Analysis/
+COPY tests/ /app/tests/
+
+# ── Dataset stage (bake into image) ─────────────────────────────────────
+ARG UCI_ZIP_URL="https://archive.ics.uci.edu/static/public/211/communities+and+crime+unnormalized.zip"
+RUN set -eux; \
+    mkdir -p /root/datasets/CommunitiesCrime; \
+    curl -L --fail --silent --show-error "$UCI_ZIP_URL" -o /tmp/comm_crime.zip; \
+    mkdir -p /tmp/comm_crime; \
+    unzip -q /tmp/comm_crime.zip -d /tmp/comm_crime; \
+    DATA_FILE="$(find /tmp/comm_crime -name 'CommViolPredUnnormalizedData.txt' -print -quit)"; \
+    test -n "$DATA_FILE" || { echo 'UCI zip missing data file'; exit 1; }; \
+    mv "$DATA_FILE" /root/datasets/CommunitiesCrime/CommViolPredUnnormalizedData.txt; \
+    rm -rf /tmp/comm_crime /tmp/comm_crime.zip
+
+# Generate the .names schema file using the in-image generator.
+RUN python -m Config.DatasetConfig.CommunitiesCrime_Sampling.generate_names_file \
+        --output /root/datasets/CommunitiesCrime/communities_and_crime_unnormalized.names
+
+# ── Smoke-test the install at build time ────────────────────────────────
+RUN python - <<'PYEOF'
+from pathlib import Path
+from Config.DatasetConfig.CommunitiesCrime_Sampling.commCrimeDatasetLoad import (
+    parse_names_file, load_raw, CRIME_RATE_COLUMNS,
+)
+d = Path('/root/datasets/CommunitiesCrime')
+names = parse_names_file(d / 'communities_and_crime_unnormalized.names')
+df = load_raw(d / 'CommViolPredUnnormalizedData.txt', names)
+missing = [c for c in CRIME_RATE_COLUMNS if c not in df.columns]
+if missing:
+    raise SystemExit(f"missing crime-rate columns at image-build time: {missing}")
+print(f"image-build smoke check ok: rows={len(df)}, cols={df.shape[1]}")
+PYEOF
+
+# ── Default entry point ─────────────────────────────────────────────────
+# No CMD by default — pick centralized or federated at `docker run` time.
+# To pin a default, uncomment one of:
+# CMD ["python", "App/TrainingApp/Client/TrainingClient.py", "--help"]
+# CMD ["python", "App/TrainingApp/HFLHost/HFLHost.py", "--help"]
+ENTRYPOINT []
+CMD ["bash"]

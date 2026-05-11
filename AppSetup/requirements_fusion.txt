@@ -1,0 +1,42 @@
+# requirements_fusion.txt — Fusion Centers FL Update (Phase 0–E)
+#
+# Minimal pinned dependency set for the FUSION-MLP code path on the UCI
+# Communities and Crime dataset. Distinct from requirements_core.txt /
+# requirements_edge.txt which target the legacy NIDS + drone-fleet stack.
+#
+# Tested on:
+#   * Python 3.11
+#   * TF 2.21 / Flower 1.29 / NumPy 2.x
+#   * 183/183 Fusion-Centers tests pass
+#
+# NOTE: tensorflow-privacy is NOT in this list. It's only imported by the
+# legacy NIDS code path, and the pinned version (0.9.0) is incompatible
+# with TF 2.21. The fusion-centers entry points (HFLHost.py / TrainingClient.py
+# with --model_type FUSION-MLP) early-dispatch around the NIDS imports and
+# therefore do not need it. If you also need to run legacy NIDS on the
+# same node, install it separately and pin TF to 2.15 instead.
+
+# ── Core scientific stack ─────────────────────────────────────────────
+numpy>=1.26,<2.3
+pandas>=2.1,<3
+scipy>=1.11,<2
+scikit-learn>=1.4,<2
+joblib>=1.3
+
+# ── Modeling stack ────────────────────────────────────────────────────
+tensorflow>=2.15,<2.22
+keras>=2.15
+# Flower for federated simulation. 1.29 is what the test suite was
+# pinned against; 1.19+ should also work but is untested.
+flwr[simulation]>=1.19,<2
+
+# ── Dataset acquisition ───────────────────────────────────────────────
+# One-time use to regenerate the .names schema file. After the .names
+# file is on disk, ucimlrepo is no longer needed at runtime.
+ucimlrepo>=0.0.7
+
+# ── Plotting (Phase E) ────────────────────────────────────────────────
+matplotlib>=3.7,<4
+
+# ── Test suite (optional but recommended on first-deploy verification) ─
+pytest>=8,<9
