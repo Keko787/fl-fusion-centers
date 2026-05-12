@@ -202,9 +202,12 @@ else:
 if ms:
     print(f'  note: sensitive columns absent (will be silently skipped): {ms}')
 "@
-    $tmpValidator = New-TemporaryFile
-    $tmpValidatorPy = "$($tmpValidator.FullName).py"
-    Move-Item $tmpValidator.FullName $tmpValidatorPy -Force
+    # Write the validator INSIDE the project root, not $env:TEMP. Python's
+    # sys.path[0] is the directory of the script being run, not the CWD —
+    # Push-Location alone doesn't put Config on the import path when the
+    # script lives under %TEMP%. Writing it in $ProjectRoot makes
+    # sys.path[0] = project root, so `import Config` resolves.
+    $tmpValidatorPy = Join-Path $ProjectRoot ".tmp_schema_validator_$([guid]::NewGuid().ToString('N')).py"
     Set-Content -Path $tmpValidatorPy -Value $validatorScript -Encoding UTF8
     try {
         Push-Location $ProjectRoot
