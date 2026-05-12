@@ -153,9 +153,16 @@ python App/TrainingApp/Client/TrainingClient.py \
     --save_name centralized_baseline
 ```
 
+There's no host process for this experiment — `--num_clients 1` means
+a single client sees the union of every training partition and trains
+in one process. The command above IS the entire experiment; nothing
+else runs.
+
 Sets the macro-F1 ceiling. Phase B DoD threshold is `> 0.55` on the global test set. After this run, capture the number from `<run_dir>/<timestamp>_evaluation.log` for the `--centralized-baseline` argument to the headline plot.
 
 ### 2.2 Experiment 2 — Local-only (per client, no FL)
+
+**One machine, sequential loop:**
 
 ```bash
 for cid in 0 1 2 3 4; do
@@ -171,9 +178,29 @@ for cid in 0 1 2 3 4; do
 done
 ```
 
-Lower-bound result — agencies operating in isolation. Use these client-by-client macro-F1 values to compute the "siloed performance" baseline.
+**One machine per client (run on each machine with the right `--client_id`):**
+
+```bash
+# On each of 5 machines, vary --client_id from 0 to 4
+python App/TrainingApp/Client/TrainingClient.py \
+    --model_type FUSION-MLP \
+    --trainingArea Central \
+    --partition_strategy geographic \
+    --num_clients 5 \
+    --client_id 0 \
+    --epochs 50 \
+    --run_dir results/exp2_local_only \
+    --save_name local_only_n5_c0
+```
+
+There's no host process for this experiment — each agency trains in
+isolation on its own partition. Lower-bound result — agencies operating
+in isolation. Use these client-by-client macro-F1 values to compute the
+"siloed performance" baseline.
 
 ### 2.3 Experiment 3 — FedAvg / IID
+
+**Host (single-node simulation — default):**
 
 ```bash
 python App/TrainingApp/HFLHost/HFLHost.py \
@@ -188,9 +215,33 @@ python App/TrainingApp/HFLHost/HFLHost.py \
     --save_name fedavg_iid_n5
 ```
 
+**Real multi-node variant** — add `--distributed` on the host and run
+five `TrainingClient.py` processes, one per machine, varying
+`--client_id` from 0 to 4:
+
+```bash
+# Host (one machine, opens [::]:8080):
+python App/TrainingApp/HFLHost/HFLHost.py \
+    --model_type FUSION-MLP --distributed \
+    --fl_strategy FedAvg --partition_strategy iid \
+    --num_clients 5 --rounds 100 --epochs 1 --min_clients 5 \
+    --commcrime_random_seed 42 \
+    --run_dir results/exp3_fedavg_iid --save_name fedavg_iid_n5
+
+# Each client (run on its own machine, vary --client_id 0..4):
+python App/TrainingApp/Client/TrainingClient.py \
+    --model_type FUSION-MLP --trainingArea Federated \
+    --custom-host <HOST_IP> \
+    --partition_strategy iid --num_clients 5 --client_id 0 \
+    --commcrime_random_seed 42 --epochs 1 \
+    --run_dir results/exp3_fedavg_iid --save_name fedavg_iid_n5_c0
+```
+
 Sanity check — federation works in the easy case. Phase C DoD: macro-F1 within ±0.02 of centralized.
 
 ### 2.4 Experiment 4 — FedAvg / non-IID geographic
+
+**Host (single-node simulation — default):**
 
 ```bash
 python App/TrainingApp/HFLHost/HFLHost.py \
@@ -205,9 +256,31 @@ python App/TrainingApp/HFLHost/HFLHost.py \
     --save_name fedavg_geo_n5
 ```
 
+**Real multi-node variant:**
+
+```bash
+# Host:
+python App/TrainingApp/HFLHost/HFLHost.py \
+    --model_type FUSION-MLP --distributed \
+    --fl_strategy FedAvg --partition_strategy geographic \
+    --num_clients 5 --rounds 100 --epochs 1 --min_clients 5 \
+    --commcrime_random_seed 42 \
+    --run_dir results/exp4_fedavg_geo --save_name fedavg_geo_n5
+
+# Each client (vary --client_id 0..4 across 5 machines):
+python App/TrainingApp/Client/TrainingClient.py \
+    --model_type FUSION-MLP --trainingArea Federated \
+    --custom-host <HOST_IP> \
+    --partition_strategy geographic --num_clients 5 --client_id 0 \
+    --commcrime_random_seed 42 --epochs 1 \
+    --run_dir results/exp4_fedavg_geo --save_name fedavg_geo_n5_c0
+```
+
 Core result — realistic fusion-center scenario.
 
 ### 2.5 Experiment 5 — FedProx / non-IID geographic
+
+**Host (single-node simulation — default):**
 
 ```bash
 python App/TrainingApp/HFLHost/HFLHost.py \
@@ -222,9 +295,37 @@ python App/TrainingApp/HFLHost/HFLHost.py \
     --save_name fedprox_geo_n5
 ```
 
+**Real multi-node variant:**
+
+```bash
+# Host:
+python App/TrainingApp/HFLHost/HFLHost.py \
+    --model_type FUSION-MLP --distributed \
+    --fl_strategy FedProx --fedprox_mu 0.01 \
+    --partition_strategy geographic \
+    --num_clients 5 --rounds 100 --epochs 1 --min_clients 5 \
+    --commcrime_random_seed 42 \
+    --run_dir results/exp5_fedprox_geo --save_name fedprox_geo_n5
+
+# Each client (vary --client_id 0..4 across 5 machines):
+python App/TrainingApp/Client/TrainingClient.py \
+    --model_type FUSION-MLP --trainingArea Federated \
+    --custom-host <HOST_IP> \
+    --partition_strategy geographic --num_clients 5 --client_id 0 \
+    --commcrime_random_seed 42 --epochs 1 \
+    --run_dir results/exp5_fedprox_geo --save_name fedprox_geo_n5_c0
+```
+
+The client command is identical to experiment 4 — FedProx's proximal
+term `μ` lives only in the strategy on the host side and is broadcast
+to clients in the per-round fit config; nothing in the client CLI
+changes between FedAvg and FedProx runs.
+
 Robustness-to-drift claim — Phase D DoD: macro-F1 ≥ FedAvg on the same partition.
 
 ### 2.6 Experiment 6 — Scaling sweep
+
+**Host (single-node simulation, sweep over N — default):**
 
 ```bash
 for n in 3 5 10; do
@@ -240,6 +341,30 @@ for n in 3 5 10; do
       --save_name fedavg_geo_n${n}
 done
 ```
+
+**Real multi-node variant (per N)** — pick the value of N you have
+hardware for, then start one host process and N client processes:
+
+```bash
+# Host (pick N ∈ {2, 3, 5, 10}; example: N=3):
+python App/TrainingApp/HFLHost/HFLHost.py \
+    --model_type FUSION-MLP --distributed \
+    --fl_strategy FedAvg --partition_strategy geographic \
+    --num_clients 3 --rounds 100 --epochs 1 --min_clients 3 \
+    --commcrime_random_seed 42 \
+    --run_dir results/exp6_scaling_n3 --save_name fedavg_geo_n3
+
+# Each client (run on its own machine, vary --client_id 0..N-1):
+python App/TrainingApp/Client/TrainingClient.py \
+    --model_type FUSION-MLP --trainingArea Federated \
+    --custom-host <HOST_IP> \
+    --partition_strategy geographic --num_clients 3 --client_id 0 \
+    --commcrime_random_seed 42 --epochs 1 \
+    --run_dir results/exp6_scaling_n3 --save_name fedavg_geo_n3_c0
+```
+
+Every machine must agree on `--num_clients` and `--partition_strategy`
+— see §7.3 for the full pinned-args list.
 
 ---
 
