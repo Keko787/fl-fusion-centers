@@ -149,8 +149,16 @@ powershell -ExecutionPolicy Bypass -File AppSetup\setup_fusion_node.ps1 -Verify 
 Container alternative:
 
 ```bash
+# Linux / macOS / WSL
 docker build -t fusion-centers -f AppSetup/DockerSetup/Dockerfile.fusion .
 docker run --rm -v "$PWD/results:/app/results" fusion-centers \
+    python App/TrainingApp/Client/TrainingClient.py --model_type FUSION-MLP --help
+```
+
+```powershell
+# Windows (PowerShell — built-in 5.1 or pwsh 7+; requires Docker Desktop)
+docker build -t fusion-centers -f AppSetup\DockerSetup\Dockerfile.fusion .
+docker run --rm -v "${PWD}\results:/app/results" fusion-centers `
     python App/TrainingApp/Client/TrainingClient.py --model_type FUSION-MLP --help
 ```
 
@@ -161,8 +169,13 @@ for the six-experiment matrix that reproduces the paper figures.
 
 ## Quickstart: HFL-DNN-GAN-NIDS
 
+> **Windows note:** the NIDS provisioning scripts target Linux testbeds
+> (AERPAW drones, Chameleon bare-metal). They will not run cleanly on
+> native Windows — they assume `apt`, Linux paths, and POSIX shell
+> primitives. Use WSL2 or run them on the target Linux host directly.
+
 ```bash
-# Clone the repository
+# Linux / macOS / WSL — clone the repository
 git clone https://github.com/Keko787/HFL-DNN-GAN-IDS.git
 cd HFL-DNN-GAN-IDS
 
@@ -171,6 +184,16 @@ python3 AppSetup/AERPAW_node_Setup.py
 
 # [Option 2] Chameleon node setup (CPU bare-metal)
 python3 AppSetup/Chameleon_node_Setup.py
+```
+
+```powershell
+# Windows (PowerShell) — clone only; provisioning must run inside WSL2 or on a Linux node
+git clone https://github.com/Keko787/HFL-DNN-GAN-IDS.git
+cd HFL-DNN-GAN-IDS
+
+# Then drop into WSL to run the Linux-only provisioning:
+#   wsl bash -c "python3 AppSetup/AERPAW_node_Setup.py"
+#   wsl bash -c "python3 AppSetup/Chameleon_node_Setup.py"
 ```
 
 The NIDS stack uses `requirements_core.txt` (TF 2.15, Flower 1.9,
@@ -186,10 +209,25 @@ in the same venv — they pin incompatible TF versions.
 Auto-fetched by `AppSetup/setup_fusion_node.{sh,ps1}`. Manual install:
 
 ```bash
+# Linux / macOS / WSL
 mkdir -p ~/datasets/CommunitiesCrime
 curl -L https://archive.ics.uci.edu/static/public/211/communities+and+crime+unnormalized.zip \
     -o /tmp/comm_crime.zip
 unzip -j /tmp/comm_crime.zip CommViolPredUnnormalizedData.txt -d ~/datasets/CommunitiesCrime/
+
+# Regenerate the .names schema (UCI 2.0 dropped it from the zip)
+pip install ucimlrepo
+python -m Config.DatasetConfig.CommunitiesCrime_Sampling.generate_names_file
+```
+
+```powershell
+# Windows (PowerShell)
+$dest = "$env:USERPROFILE\datasets\CommunitiesCrime"
+New-Item -ItemType Directory -Force -Path $dest | Out-Null
+Invoke-WebRequest -Uri "https://archive.ics.uci.edu/static/public/211/communities+and+crime+unnormalized.zip" `
+    -OutFile "$env:TEMP\comm_crime.zip"
+Expand-Archive -Path "$env:TEMP\comm_crime.zip" -DestinationPath "$env:TEMP\comm_crime" -Force
+Copy-Item "$env:TEMP\comm_crime\CommViolPredUnnormalizedData.txt" $dest -Force
 
 # Regenerate the .names schema (UCI 2.0 dropped it from the zip)
 pip install ucimlrepo
@@ -205,7 +243,14 @@ After install, validate the schema with the 5-line snippet in
 2. Upload `CICIoT2023.zip` to `$HOME/datasets/`, then:
 
 ```bash
+# Linux / macOS / WSL
 unzip $HOME/datasets/CICIoT2023.zip -d $HOME/datasets/CICIOT2023
+```
+
+```powershell
+# Windows (PowerShell)
+Expand-Archive -Path "$env:USERPROFILE\datasets\CICIoT2023.zip" `
+    -DestinationPath "$env:USERPROFILE\datasets\CICIOT2023" -Force
 ```
 
 ---
@@ -240,11 +285,22 @@ Single-process baseline. Sets the macro-F1 ceiling federated runs are
 compared against.
 
 ```bash
+# Linux / macOS / WSL
 python App/TrainingApp/Client/TrainingClient.py \
     --model_type FUSION-MLP --trainingArea Central \
     --partition_strategy iid --num_clients 1 --client_id 0 \
     --epochs 50 \
     --run_dir results/exp1_centralized \
+    --save_name centralized_baseline
+```
+
+```powershell
+# Windows (PowerShell)
+python App/TrainingApp/Client/TrainingClient.py `
+    --model_type FUSION-MLP --trainingArea Central `
+    --partition_strategy iid --num_clients 1 --client_id 0 `
+    --epochs 50 `
+    --run_dir results/exp1_centralized `
     --save_name centralized_baseline
 ```
 
@@ -256,6 +312,7 @@ experiments. Five-client FedAvg over a geographic non-IID partition
 (the realistic fusion-center scenario):
 
 ```bash
+# Linux / macOS / WSL
 python App/TrainingApp/HFLHost/HFLHost.py \
     --model_type FUSION-MLP --fl_strategy FedAvg \
     --partition_strategy geographic \
@@ -264,14 +321,35 @@ python App/TrainingApp/HFLHost/HFLHost.py \
     --save_name fedavg_geo_n5
 ```
 
+```powershell
+# Windows (PowerShell)
+python App/TrainingApp/HFLHost/HFLHost.py `
+    --model_type FUSION-MLP --fl_strategy FedAvg `
+    --partition_strategy geographic `
+    --num_clients 5 --rounds 100 --epochs 1 --min_clients 5 `
+    --run_dir results/exp4_fedavg_geo `
+    --save_name fedavg_geo_n5
+```
+
 FedProx variant (drift-robust on non-IID partitions):
 
 ```bash
+# Linux / macOS / WSL
 python App/TrainingApp/HFLHost/HFLHost.py \
     --model_type FUSION-MLP --fl_strategy FedProx --fedprox_mu 0.01 \
     --partition_strategy geographic \
     --num_clients 5 --rounds 100 --epochs 1 --min_clients 5 \
     --run_dir results/exp5_fedprox_geo \
+    --save_name fedprox_geo_n5
+```
+
+```powershell
+# Windows (PowerShell)
+python App/TrainingApp/HFLHost/HFLHost.py `
+    --model_type FUSION-MLP --fl_strategy FedProx --fedprox_mu 0.01 `
+    --partition_strategy geographic `
+    --num_clients 5 --rounds 100 --epochs 1 --min_clients 5 `
+    --run_dir results/exp5_fedprox_geo `
     --save_name fedprox_geo_n5
 ```
 
@@ -293,6 +371,7 @@ that dials the host's IP.
 **Host machine** (one — must outlive the run, port 8080 open inbound):
 
 ```bash
+# Linux / macOS / WSL
 source .venv/bin/activate
 python App/TrainingApp/HFLHost/HFLHost.py \
     --model_type FUSION-MLP --distributed --fl_strategy FedAvg \
@@ -302,15 +381,38 @@ python App/TrainingApp/HFLHost/HFLHost.py \
     --run_dir results/fed_run1 --save_name fed_run1
 ```
 
+```powershell
+# Windows (PowerShell)
+& .\.venv\Scripts\Activate.ps1
+python App/TrainingApp/HFLHost/HFLHost.py `
+    --model_type FUSION-MLP --distributed --fl_strategy FedAvg `
+    --partition_strategy iid --num_clients 3 `
+    --rounds 10 --min_clients 3 --epochs 1 `
+    --commcrime_random_seed 42 `
+    --run_dir results/fed_run1 --save_name fed_run1
+```
+
 **Each client machine** (one invocation per client, varying `--client_id`):
 
 ```bash
+# Linux / macOS / WSL
 source .venv/bin/activate
 python App/TrainingApp/Client/TrainingClient.py \
     --model_type FUSION-MLP --trainingArea Federated \
     --custom-host <HOST_IP> \
     --partition_strategy iid --num_clients 3 --client_id 0 \
     --commcrime_random_seed 42 --epochs 1 \
+    --run_dir results/fed_run1 --save_name client0
+```
+
+```powershell
+# Windows (PowerShell)
+& .\.venv\Scripts\Activate.ps1
+python App/TrainingApp/Client/TrainingClient.py `
+    --model_type FUSION-MLP --trainingArea Federated `
+    --custom-host <HOST_IP> `
+    --partition_strategy iid --num_clients 3 --client_id 0 `
+    --commcrime_random_seed 42 --epochs 1 `
     --run_dir results/fed_run1 --save_name client0
 ```
 
@@ -331,8 +433,10 @@ silently produces garbage.
 **Network requirements:**
 - Port **8080** open on the host firewall (gRPC, plaintext — no TLS).
 - Clients dial `<HOST_IP>:8080` — the port is currently hardcoded.
-- `ping` works ≠ TCP:8080 works. Verify with `nc -vz <HOST_IP> 8080`
-  from a client *before* you start the FL processes.
+- `ping` works ≠ TCP:8080 works. Verify *before* you start the FL processes:
+  - Linux / macOS / WSL: `nc -vz <HOST_IP> 8080`
+  - Windows (PowerShell): `Test-NetConnection -ComputerName <HOST_IP> -Port 8080`
+    (`TcpTestSucceeded : True` means the port is reachable).
 
 **Client-count limits:** Same as simulation —
 `--num_clients ∈ {1, 2, 3, 5, 10}`. For only 2 clients pass
@@ -361,15 +465,29 @@ from the `--run_dir` artifacts (no separate logging pass needed). Make
 sure the venv is active first.
 
 ```bash
+# Linux / macOS / WSL
 source .venv/bin/activate
+```
+
+```powershell
+# Windows (PowerShell)
+& .\.venv\Scripts\Activate.ps1
 ```
 
 **Per-client class distribution** (uses one run's `partition_stats.json`
 — shows the non-IID character of the partition):
 
 ```bash
+# Linux / macOS / WSL
 python -m Analysis.CommunitiesCrime.plot_per_client_distribution \
     --run_dir results/exp4_fedavg_geo \
+    --output results/figures/per_client_distribution_geo_n5.png
+```
+
+```powershell
+# Windows (PowerShell)
+python -m Analysis.CommunitiesCrime.plot_per_client_distribution `
+    --run_dir results/exp4_fedavg_geo `
     --output results/figures/per_client_distribution_geo_n5.png
 ```
 
@@ -379,6 +497,7 @@ substitute the actual centralized macro-F1 from experiment 1's
 `<run_dir>/<timestamp>_evaluation.log`):
 
 ```bash
+# Linux / macOS / WSL
 python -m Analysis.CommunitiesCrime.plot_centralized_vs_federated \
     --runs FedAvg-IID=results/exp3_fedavg_iid \
            FedAvg-geo=results/exp4_fedavg_geo \
@@ -387,14 +506,34 @@ python -m Analysis.CommunitiesCrime.plot_centralized_vs_federated \
     --output results/figures/headline.png
 ```
 
+```powershell
+# Windows (PowerShell)
+python -m Analysis.CommunitiesCrime.plot_centralized_vs_federated `
+    --runs FedAvg-IID=results/exp3_fedavg_iid `
+           FedAvg-geo=results/exp4_fedavg_geo `
+           FedProx-geo=results/exp5_fedprox_geo `
+    --centralized-baseline 0.62 `
+    --output results/figures/headline.png
+```
+
 **Scaling sweep** (best smoothed macro-F1 + rounds-to-convergence vs N
 — needs the three runs from experiment 6):
 
 ```bash
+# Linux / macOS / WSL
 python -m Analysis.CommunitiesCrime.plot_scaling_n_clients \
     --runs 3=results/exp6_scaling_n3 \
            5=results/exp6_scaling_n5 \
            10=results/exp6_scaling_n10 \
+    --output results/figures/scaling_n_clients.png
+```
+
+```powershell
+# Windows (PowerShell)
+python -m Analysis.CommunitiesCrime.plot_scaling_n_clients `
+    --runs 3=results/exp6_scaling_n3 `
+           5=results/exp6_scaling_n5 `
+           10=results/exp6_scaling_n10 `
     --output results/figures/scaling_n_clients.png
 ```
 
@@ -411,21 +550,42 @@ for the full metric list and ablation/overhead figure recipes.
 ### NIDS — Federated Training (Host)
 
 ```bash
+# Linux / macOS / WSL
 python3 App/TrainingApp/HFLHost/HFLHost.py --help
+```
+
+```powershell
+# Windows (PowerShell) — use `python` (the NIDS scripts assume Linux at runtime; --help works anywhere)
+python App/TrainingApp/HFLHost/HFLHost.py --help
 ```
 
 ### NIDS — Localized & Federated Training (Client)
 
 ```bash
+# Linux / macOS / WSL
 python3 App/TrainingApp/Client/TrainingClient.py --help
+# Default uses CICIOT2023 dataset; use --dataset IOTBOTNET for IoTBotnet.
+```
+
+```powershell
+# Windows (PowerShell)
+python App/TrainingApp/Client/TrainingClient.py --help
 # Default uses CICIOT2023 dataset; use --dataset IOTBOTNET for IoTBotnet.
 ```
 
 Demo of localized NIDS training:
 
 ```bash
+# Linux / macOS / WSL
 python3 App/TrainingApp/Client/TrainingClient.py \
     --model_type AC-GAN --model_training Both --trainingArea Central \
+    --dataset CICIOT --save_name Test1
+```
+
+```powershell
+# Windows (PowerShell)
+python App/TrainingApp/Client/TrainingClient.py `
+    --model_type AC-GAN --model_training Both --trainingArea Central `
     --dataset CICIOT --save_name Test1
 ```
 
@@ -547,6 +707,7 @@ controlled-skew ablation.
 Fusion Centers ships with 183 unit + integration tests. After install:
 
 ```bash
+# Linux / macOS / WSL (and Windows PowerShell — same syntax)
 pytest tests/ -q                  # full suite
 pytest tests/unit -q -k fusion    # fusion-centers only
 ```

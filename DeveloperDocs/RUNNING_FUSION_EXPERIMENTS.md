@@ -25,8 +25,10 @@ Every command in this runbook assumes the project venv is activated:
 ```bash
 # Linux / macOS / WSL — from the project root
 source .venv/bin/activate
+```
 
-# Windows (PowerShell 7+)
+```powershell
+# Windows (PowerShell — built-in 5.1 or pwsh 7+)
 & .\.venv\Scripts\Activate.ps1
 ```
 
@@ -76,12 +78,24 @@ install).
 If you'd rather ship a container, build the slim image:
 
 ```bash
+# Linux / macOS / WSL
 docker build -t fusion-centers -f AppSetup/DockerSetup/Dockerfile.fusion .
 docker run --rm -v "$PWD/results:/app/results" fusion-centers \
     python App/TrainingApp/Client/TrainingClient.py \
         --model_type FUSION-MLP --trainingArea Central \
         --partition_strategy iid --num_clients 1 --client_id 0 \
         --epochs 50 --run_dir results/exp1_centralized \
+        --save_name centralized_baseline
+```
+
+```powershell
+# Windows (PowerShell — requires Docker Desktop)
+docker build -t fusion-centers -f AppSetup\DockerSetup\Dockerfile.fusion .
+docker run --rm -v "${PWD}\results:/app/results" fusion-centers `
+    python App/TrainingApp/Client/TrainingClient.py `
+        --model_type FUSION-MLP --trainingArea Central `
+        --partition_strategy iid --num_clients 1 --client_id 0 `
+        --epochs 50 --run_dir results/exp1_centralized `
         --save_name centralized_baseline
 ```
 
@@ -100,6 +114,7 @@ script does it for you. §1 stays below for the manual-install case.
 The project expects the unnormalized UCI Communities and Crime archive under `$HOME/datasets/CommunitiesCrime/`. UCI 2.0 stopped shipping the `.names` schema file with the dataset zip — we generate it ourselves from the canonical metadata (see implementation plan §9.1).
 
 ```bash
+# Linux / macOS / WSL
 # 1. Download the data file
 mkdir -p ~/datasets/CommunitiesCrime
 curl -L https://archive.ics.uci.edu/static/public/211/communities+and+crime+unnormalized.zip \
@@ -111,11 +126,27 @@ pip install ucimlrepo
 python -m Config.DatasetConfig.CommunitiesCrime_Sampling.generate_names_file
 ```
 
+```powershell
+# Windows (PowerShell)
+# 1. Download the data file
+$dest = "$env:USERPROFILE\datasets\CommunitiesCrime"
+New-Item -ItemType Directory -Force -Path $dest | Out-Null
+Invoke-WebRequest -Uri "https://archive.ics.uci.edu/static/public/211/communities+and+crime+unnormalized.zip" `
+    -OutFile "$env:TEMP\comm_crime.zip"
+Expand-Archive -Path "$env:TEMP\comm_crime.zip" -DestinationPath "$env:TEMP\comm_crime" -Force
+Copy-Item "$env:TEMP\comm_crime\CommViolPredUnnormalizedData.txt" $dest -Force
+
+# 2. Generate the .names schema via ucimlrepo (one-time)
+pip install ucimlrepo
+python -m Config.DatasetConfig.CommunitiesCrime_Sampling.generate_names_file
+```
+
 The generator script writes `~/datasets/CommunitiesCrime/communities_and_crime_unnormalized.names` (147 attributes) in the ARFF format `parse_names_file` expects.
 
 **Validate the schema before any experiment run** — see implementation plan §9.1 + §9.2 for the URL/column-name + `.names` format risks. A 5-minute check (uses `$HOME/datasets/CommunitiesCrime/` by default; override `DATA_DIR` for a custom archive location):
 
 ```bash
+# Linux / macOS / WSL
 DATA_DIR="${DATA_DIR:-$HOME/datasets/CommunitiesCrime}" \
 python -c "
 import os
@@ -132,6 +163,26 @@ missing_sensitive = [c for c in SENSITIVE_COLUMNS if c not in df.columns]
 print(f'missing crime-rate cols: {missing_crime}')
 print(f'missing sensitive cols (silently kept): {missing_sensitive}')
 "
+```
+
+```powershell
+# Windows (PowerShell)
+if (-not $env:DATA_DIR) { $env:DATA_DIR = "$env:USERPROFILE\datasets\CommunitiesCrime" }
+python -c @"
+import os
+from pathlib import Path
+from Config.DatasetConfig.CommunitiesCrime_Sampling.commCrimeDatasetLoad import (
+    parse_names_file, load_raw, CRIME_RATE_COLUMNS, SENSITIVE_COLUMNS,
+)
+data_dir = Path(os.environ['DATA_DIR'])
+names = parse_names_file(data_dir / 'communities_and_crime_unnormalized.names')
+df = load_raw(data_dir / 'CommViolPredUnnormalizedData.txt', names)
+print(f'rows={len(df)}, cols={df.shape[1]}')
+missing_crime = [c for c in CRIME_RATE_COLUMNS if c not in df.columns]
+missing_sensitive = [c for c in SENSITIVE_COLUMNS if c not in df.columns]
+print(f'missing crime-rate cols: {missing_crime}')
+print(f'missing sensitive cols (silently kept): {missing_sensitive}')
+"@
 ```
 
 If any crime-rate column is missing, label engineering silently degrades. Adjust the constants in `commCrimeDatasetLoad.py` and re-run.
@@ -163,6 +214,7 @@ partitioner uses an East+Central vs. West split for N=2.
 ### 2.1 Experiment 1 — Centralized baseline
 
 ```bash
+# Linux / macOS / WSL
 python App/TrainingApp/Client/TrainingClient.py \
     --model_type FUSION-MLP \
     --trainingArea Central \
@@ -171,6 +223,19 @@ python App/TrainingApp/Client/TrainingClient.py \
     --client_id 0 \
     --epochs 50 \
     --run_dir results/exp1_centralized \
+    --save_name centralized_baseline
+```
+
+```powershell
+# Windows (PowerShell)
+python App/TrainingApp/Client/TrainingClient.py `
+    --model_type FUSION-MLP `
+    --trainingArea Central `
+    --partition_strategy iid `
+    --num_clients 1 `
+    --client_id 0 `
+    --epochs 50 `
+    --run_dir results/exp1_centralized `
     --save_name centralized_baseline
 ```
 
@@ -189,6 +254,7 @@ horizontal reference line).
 **One machine, sequential loop:**
 
 ```bash
+# Linux / macOS / WSL
 for cid in 0 1 2 3 4; do
   python App/TrainingApp/Client/TrainingClient.py \
       --model_type FUSION-MLP \
@@ -202,10 +268,25 @@ for cid in 0 1 2 3 4; do
 done
 ```
 
+```powershell
+# Windows (PowerShell)
+foreach ($cid in 0..4) {
+    python App/TrainingApp/Client/TrainingClient.py `
+        --model_type FUSION-MLP `
+        --trainingArea Central `
+        --partition_strategy geographic `
+        --num_clients 5 `
+        --client_id $cid `
+        --epochs 50 `
+        --run_dir results/exp2_local_only `
+        --save_name "local_only_n5_c$cid"
+}
+```
+
 **One machine per client (run on each machine with the right `--client_id`):**
 
 ```bash
-# On each of 5 machines, vary --client_id from 0 to 4
+# Linux / macOS / WSL — on each of 5 machines, vary --client_id from 0 to 4
 python App/TrainingApp/Client/TrainingClient.py \
     --model_type FUSION-MLP \
     --trainingArea Central \
@@ -214,6 +295,19 @@ python App/TrainingApp/Client/TrainingClient.py \
     --client_id 0 \
     --epochs 50 \
     --run_dir results/exp2_local_only \
+    --save_name local_only_n5_c0
+```
+
+```powershell
+# Windows (PowerShell) — on each of 5 machines, vary --client_id from 0 to 4
+python App/TrainingApp/Client/TrainingClient.py `
+    --model_type FUSION-MLP `
+    --trainingArea Central `
+    --partition_strategy geographic `
+    --num_clients 5 `
+    --client_id 0 `
+    --epochs 50 `
+    --run_dir results/exp2_local_only `
     --save_name local_only_n5_c0
 ```
 
@@ -231,6 +325,7 @@ convergence curve.
 **Host (single-node simulation — default):**
 
 ```bash
+# Linux / macOS / WSL
 python App/TrainingApp/HFLHost/HFLHost.py \
     --model_type FUSION-MLP \
     --fl_strategy FedAvg \
@@ -243,11 +338,26 @@ python App/TrainingApp/HFLHost/HFLHost.py \
     --save_name fedavg_iid_n5
 ```
 
+```powershell
+# Windows (PowerShell)
+python App/TrainingApp/HFLHost/HFLHost.py `
+    --model_type FUSION-MLP `
+    --fl_strategy FedAvg `
+    --partition_strategy iid `
+    --num_clients 5 `
+    --rounds 100 `
+    --epochs 1 `
+    --min_clients 5 `
+    --run_dir results/exp3_fedavg_iid `
+    --save_name fedavg_iid_n5
+```
+
 **Real multi-node variant** — add `--distributed` on the host and run
 five `TrainingClient.py` processes, one per machine, varying
 `--client_id` from 0 to 4:
 
 ```bash
+# Linux / macOS / WSL
 # Host (one machine, opens [::]:8080):
 python App/TrainingApp/HFLHost/HFLHost.py \
     --model_type FUSION-MLP --distributed \
@@ -265,6 +375,25 @@ python App/TrainingApp/Client/TrainingClient.py \
     --run_dir results/exp3_fedavg_iid --save_name fedavg_iid_n5_c0
 ```
 
+```powershell
+# Windows (PowerShell)
+# Host (one machine, opens [::]:8080):
+python App/TrainingApp/HFLHost/HFLHost.py `
+    --model_type FUSION-MLP --distributed `
+    --fl_strategy FedAvg --partition_strategy iid `
+    --num_clients 5 --rounds 100 --epochs 1 --min_clients 5 `
+    --commcrime_random_seed 42 `
+    --run_dir results/exp3_fedavg_iid --save_name fedavg_iid_n5
+
+# Each client (run on its own machine, vary --client_id 0..4):
+python App/TrainingApp/Client/TrainingClient.py `
+    --model_type FUSION-MLP --trainingArea Federated `
+    --custom-host <HOST_IP> `
+    --partition_strategy iid --num_clients 5 --client_id 0 `
+    --commcrime_random_seed 42 --epochs 1 `
+    --run_dir results/exp3_fedavg_iid --save_name fedavg_iid_n5_c0
+```
+
 Sanity check — federation works in the easy case. Phase C DoD: macro-F1 within ±0.02 of centralized.
 
 **Feeds figure:** §4.2 (headline convergence — appears as the
@@ -275,6 +404,7 @@ Sanity check — federation works in the easy case. Phase C DoD: macro-F1 within
 **Host (single-node simulation — default):**
 
 ```bash
+# Linux / macOS / WSL
 python App/TrainingApp/HFLHost/HFLHost.py \
     --model_type FUSION-MLP \
     --fl_strategy FedAvg \
@@ -287,9 +417,24 @@ python App/TrainingApp/HFLHost/HFLHost.py \
     --save_name fedavg_geo_n5
 ```
 
+```powershell
+# Windows (PowerShell)
+python App/TrainingApp/HFLHost/HFLHost.py `
+    --model_type FUSION-MLP `
+    --fl_strategy FedAvg `
+    --partition_strategy geographic `
+    --num_clients 5 `
+    --rounds 100 `
+    --epochs 1 `
+    --min_clients 5 `
+    --run_dir results/exp4_fedavg_geo `
+    --save_name fedavg_geo_n5
+```
+
 **Real multi-node variant:**
 
 ```bash
+# Linux / macOS / WSL
 # Host:
 python App/TrainingApp/HFLHost/HFLHost.py \
     --model_type FUSION-MLP --distributed \
@@ -307,6 +452,25 @@ python App/TrainingApp/Client/TrainingClient.py \
     --run_dir results/exp4_fedavg_geo --save_name fedavg_geo_n5_c0
 ```
 
+```powershell
+# Windows (PowerShell)
+# Host:
+python App/TrainingApp/HFLHost/HFLHost.py `
+    --model_type FUSION-MLP --distributed `
+    --fl_strategy FedAvg --partition_strategy geographic `
+    --num_clients 5 --rounds 100 --epochs 1 --min_clients 5 `
+    --commcrime_random_seed 42 `
+    --run_dir results/exp4_fedavg_geo --save_name fedavg_geo_n5
+
+# Each client (vary --client_id 0..4 across 5 machines):
+python App/TrainingApp/Client/TrainingClient.py `
+    --model_type FUSION-MLP --trainingArea Federated `
+    --custom-host <HOST_IP> `
+    --partition_strategy geographic --num_clients 5 --client_id 0 `
+    --commcrime_random_seed 42 --epochs 1 `
+    --run_dir results/exp4_fedavg_geo --save_name fedavg_geo_n5_c0
+```
+
 Core result — realistic fusion-center scenario.
 
 **Feeds figures:** §4.1 (per-client class distribution — shows the
@@ -318,6 +482,7 @@ non-IID character of this run's geographic partition) and §4.2
 **Host (single-node simulation — default):**
 
 ```bash
+# Linux / macOS / WSL
 python App/TrainingApp/HFLHost/HFLHost.py \
     --model_type FUSION-MLP \
     --fl_strategy FedProx --fedprox_mu 0.01 \
@@ -330,9 +495,24 @@ python App/TrainingApp/HFLHost/HFLHost.py \
     --save_name fedprox_geo_n5
 ```
 
+```powershell
+# Windows (PowerShell)
+python App/TrainingApp/HFLHost/HFLHost.py `
+    --model_type FUSION-MLP `
+    --fl_strategy FedProx --fedprox_mu 0.01 `
+    --partition_strategy geographic `
+    --num_clients 5 `
+    --rounds 100 `
+    --epochs 1 `
+    --min_clients 5 `
+    --run_dir results/exp5_fedprox_geo `
+    --save_name fedprox_geo_n5
+```
+
 **Real multi-node variant:**
 
 ```bash
+# Linux / macOS / WSL
 # Host:
 python App/TrainingApp/HFLHost/HFLHost.py \
     --model_type FUSION-MLP --distributed \
@@ -351,6 +531,26 @@ python App/TrainingApp/Client/TrainingClient.py \
     --run_dir results/exp5_fedprox_geo --save_name fedprox_geo_n5_c0
 ```
 
+```powershell
+# Windows (PowerShell)
+# Host:
+python App/TrainingApp/HFLHost/HFLHost.py `
+    --model_type FUSION-MLP --distributed `
+    --fl_strategy FedProx --fedprox_mu 0.01 `
+    --partition_strategy geographic `
+    --num_clients 5 --rounds 100 --epochs 1 --min_clients 5 `
+    --commcrime_random_seed 42 `
+    --run_dir results/exp5_fedprox_geo --save_name fedprox_geo_n5
+
+# Each client (vary --client_id 0..4 across 5 machines):
+python App/TrainingApp/Client/TrainingClient.py `
+    --model_type FUSION-MLP --trainingArea Federated `
+    --custom-host <HOST_IP> `
+    --partition_strategy geographic --num_clients 5 --client_id 0 `
+    --commcrime_random_seed 42 --epochs 1 `
+    --run_dir results/exp5_fedprox_geo --save_name fedprox_geo_n5_c0
+```
+
 The client command is identical to experiment 4 — FedProx's proximal
 term `μ` lives only in the strategy on the host side and is broadcast
 to clients in the per-round fit config; nothing in the client CLI
@@ -366,6 +566,7 @@ and §4.4 (proximal-term evolution via `--metric proximal_contribution`).
 **Host (single-node simulation, sweep over N — default):**
 
 ```bash
+# Linux / macOS / WSL
 for n in 3 5 10; do
   python App/TrainingApp/HFLHost/HFLHost.py \
       --model_type FUSION-MLP \
@@ -380,10 +581,27 @@ for n in 3 5 10; do
 done
 ```
 
+```powershell
+# Windows (PowerShell)
+foreach ($n in 3, 5, 10) {
+    python App/TrainingApp/HFLHost/HFLHost.py `
+        --model_type FUSION-MLP `
+        --fl_strategy FedAvg `
+        --partition_strategy geographic `
+        --num_clients $n `
+        --rounds 100 `
+        --epochs 1 `
+        --min_clients $n `
+        --run_dir "results/exp6_scaling_n$n" `
+        --save_name "fedavg_geo_n$n"
+}
+```
+
 **Real multi-node variant (per N)** — pick the value of N you have
 hardware for, then start one host process and N client processes:
 
 ```bash
+# Linux / macOS / WSL
 # Host (pick N ∈ {2, 3, 5, 10}; example: N=3):
 python App/TrainingApp/HFLHost/HFLHost.py \
     --model_type FUSION-MLP --distributed \
@@ -398,6 +616,25 @@ python App/TrainingApp/Client/TrainingClient.py \
     --custom-host <HOST_IP> \
     --partition_strategy geographic --num_clients 3 --client_id 0 \
     --commcrime_random_seed 42 --epochs 1 \
+    --run_dir results/exp6_scaling_n3 --save_name fedavg_geo_n3_c0
+```
+
+```powershell
+# Windows (PowerShell)
+# Host (pick N ∈ {2, 3, 5, 10}; example: N=3):
+python App/TrainingApp/HFLHost/HFLHost.py `
+    --model_type FUSION-MLP --distributed `
+    --fl_strategy FedAvg --partition_strategy geographic `
+    --num_clients 3 --rounds 100 --epochs 1 --min_clients 3 `
+    --commcrime_random_seed 42 `
+    --run_dir results/exp6_scaling_n3 --save_name fedavg_geo_n3
+
+# Each client (run on its own machine, vary --client_id 0..N-1):
+python App/TrainingApp/Client/TrainingClient.py `
+    --model_type FUSION-MLP --trainingArea Federated `
+    --custom-host <HOST_IP> `
+    --partition_strategy geographic --num_clients 3 --client_id 0 `
+    --commcrime_random_seed 42 --epochs 1 `
     --run_dir results/exp6_scaling_n3 --save_name fedavg_geo_n3_c0
 ```
 
@@ -470,7 +707,7 @@ came from.
 Re-run experiments 1, 4, 5 with `--no-drop_sensitive_features` to expose the bias-mitigation effect:
 
 ```bash
-# Examples 1, 4, 5 with sensitive features kept
+# Linux / macOS / WSL — examples 1, 4, 5 with sensitive features kept
 python App/TrainingApp/Client/TrainingClient.py \
     --model_type FUSION-MLP --trainingArea Central \
     --partition_strategy iid --num_clients 1 --client_id 0 \
@@ -483,6 +720,24 @@ python App/TrainingApp/HFLHost/HFLHost.py \
     --partition_strategy geographic --num_clients 5 --rounds 100 \
     --epochs 1 --min_clients 5 --no-drop_sensitive_features \
     --run_dir results/exp4_fedavg_geo_KEEP_SENSITIVE \
+    --save_name fedavg_geo_keep_sensitive
+# (and the equivalent for exp5)
+```
+
+```powershell
+# Windows (PowerShell) — examples 1, 4, 5 with sensitive features kept
+python App/TrainingApp/Client/TrainingClient.py `
+    --model_type FUSION-MLP --trainingArea Central `
+    --partition_strategy iid --num_clients 1 --client_id 0 `
+    --epochs 50 --no-drop_sensitive_features `
+    --run_dir results/exp1_centralized_KEEP_SENSITIVE `
+    --save_name centralized_keep_sensitive
+
+python App/TrainingApp/HFLHost/HFLHost.py `
+    --model_type FUSION-MLP --fl_strategy FedAvg `
+    --partition_strategy geographic --num_clients 5 --rounds 100 `
+    --epochs 1 --min_clients 5 --no-drop_sensitive_features `
+    --run_dir results/exp4_fedavg_geo_KEEP_SENSITIVE `
     --save_name fedavg_geo_keep_sensitive
 # (and the equivalent for exp5)
 ```
@@ -501,7 +756,13 @@ pass needed, just point each script at the relevant `--run_dir`(s).
 import matplotlib, joblib, and the project's own log parser):
 
 ```bash
-source .venv/bin/activate   # Linux / macOS / WSL
+# Linux / macOS / WSL
+source .venv/bin/activate
+```
+
+```powershell
+# Windows (PowerShell)
+& .\.venv\Scripts\Activate.ps1
 ```
 
 The three primary scripts and what they consume:
@@ -522,8 +783,16 @@ All three accept:
 ### 4.1 Per-client class distribution
 
 ```bash
+# Linux / macOS / WSL
 python -m Analysis.CommunitiesCrime.plot_per_client_distribution \
     --run_dir results/exp4_fedavg_geo \
+    --output results/figures/per_client_distribution_geo_n5.png
+```
+
+```powershell
+# Windows (PowerShell)
+python -m Analysis.CommunitiesCrime.plot_per_client_distribution `
+    --run_dir results/exp4_fedavg_geo `
     --output results/figures/per_client_distribution_geo_n5.png
 ```
 
@@ -532,6 +801,7 @@ Outline §6.7 figure — bar chart of train-set class counts per client. Shows t
 ### 4.2 Headline convergence figure (centralized vs federated)
 
 ```bash
+# Linux / macOS / WSL
 python -m Analysis.CommunitiesCrime.plot_centralized_vs_federated \
     --runs FedAvg-IID=results/exp3_fedavg_iid \
            FedAvg-geo=results/exp4_fedavg_geo \
@@ -540,15 +810,35 @@ python -m Analysis.CommunitiesCrime.plot_centralized_vs_federated \
     --output results/figures/headline.png
 ```
 
+```powershell
+# Windows (PowerShell)
+python -m Analysis.CommunitiesCrime.plot_centralized_vs_federated `
+    --runs FedAvg-IID=results/exp3_fedavg_iid `
+           FedAvg-geo=results/exp4_fedavg_geo `
+           FedProx-geo=results/exp5_fedprox_geo `
+    --centralized-baseline 0.62 `
+    --output results/figures/headline.png
+```
+
 The `0.62` is the macro-F1 from experiment 1's evaluation log (substitute your real number). This is the paper's primary plot per outline §7.9.
 
 ### 4.3 Scaling figure
 
 ```bash
+# Linux / macOS / WSL
 python -m Analysis.CommunitiesCrime.plot_scaling_n_clients \
     --runs 3=results/exp6_scaling_n3 \
            5=results/exp6_scaling_n5 \
            10=results/exp6_scaling_n10 \
+    --output results/figures/scaling_n_clients.png
+```
+
+```powershell
+# Windows (PowerShell)
+python -m Analysis.CommunitiesCrime.plot_scaling_n_clients `
+    --runs 3=results/exp6_scaling_n3 `
+           5=results/exp6_scaling_n5 `
+           10=results/exp6_scaling_n10 `
     --output results/figures/scaling_n_clients.png
 ```
 
@@ -558,6 +848,7 @@ The headline plot script (`plot_centralized_vs_federated`) accepts any
 metric the server log records via `--metric`. Useful examples:
 
 ```bash
+# Linux / macOS / WSL
 # FedProx proximal-term evolution (Phase D + Phase E review #4) — shows the
 # (μ/2)·Σ‖w-g‖² penalty's per-round average across clients.
 python -m Analysis.CommunitiesCrime.plot_centralized_vs_federated \
@@ -577,6 +868,29 @@ python -m Analysis.CommunitiesCrime.plot_centralized_vs_federated \
     --runs FedAvg-geo=results/exp4_fedavg_geo \
            FedProx-geo=results/exp5_fedprox_geo \
     --metric fairness_accuracy_variance \
+    --output results/figures/fairness_over_rounds.png
+```
+
+```powershell
+# Windows (PowerShell)
+# FedProx proximal-term evolution
+python -m Analysis.CommunitiesCrime.plot_centralized_vs_federated `
+    --runs FedProx-geo=results/exp5_fedprox_geo `
+    --metric proximal_contribution `
+    --output results/figures/proximal_evolution.png
+
+# Federation-overhead — bytes uploaded per round (post-serialization).
+python -m Analysis.CommunitiesCrime.plot_centralized_vs_federated `
+    --runs FedAvg-N5=results/exp4_fedavg_geo `
+           FedAvg-N10=results/exp6_scaling_n10 `
+    --metric parameter_update_wire_bytes `
+    --output results/figures/overhead_bytes.png
+
+# Fairness — variance of per-client accuracy over rounds.
+python -m Analysis.CommunitiesCrime.plot_centralized_vs_federated `
+    --runs FedAvg-geo=results/exp4_fedavg_geo `
+           FedProx-geo=results/exp5_fedprox_geo `
+    --metric fairness_accuracy_variance `
     --output results/figures/fairness_over_rounds.png
 ```
 
@@ -656,6 +970,7 @@ roster fills.
 **On the host machine** (activate venv first):
 
 ```bash
+# Linux / macOS / WSL
 source .venv/bin/activate
 python App/TrainingApp/HFLHost/HFLHost.py \
     --model_type FUSION-MLP --distributed --fl_strategy FedAvg \
@@ -665,18 +980,41 @@ python App/TrainingApp/HFLHost/HFLHost.py \
     --run_dir results/fed_run1 --save_name fed_run1
 ```
 
+```powershell
+# Windows (PowerShell)
+& .\.venv\Scripts\Activate.ps1
+python App/TrainingApp/HFLHost/HFLHost.py `
+    --model_type FUSION-MLP --distributed --fl_strategy FedAvg `
+    --partition_strategy iid --num_clients 3 `
+    --rounds 10 --min_clients 3 --epochs 1 `
+    --commcrime_random_seed 42 `
+    --run_dir results/fed_run1 --save_name fed_run1
+```
+
 Wait for the line `=== FUSION-MLP distributed server on [::]:8080 ===`
 before launching clients.
 
 **On each client machine** (one invocation each, varying `--client_id`):
 
 ```bash
+# Linux / macOS / WSL
 source .venv/bin/activate
 python App/TrainingApp/Client/TrainingClient.py \
     --model_type FUSION-MLP --trainingArea Federated \
     --custom-host <HOST_IP> \
     --partition_strategy iid --num_clients 3 --client_id 0 \
     --commcrime_random_seed 42 --epochs 1 \
+    --run_dir results/fed_run1 --save_name client0
+```
+
+```powershell
+# Windows (PowerShell)
+& .\.venv\Scripts\Activate.ps1
+python App/TrainingApp/Client/TrainingClient.py `
+    --model_type FUSION-MLP --trainingArea Federated `
+    --custom-host <HOST_IP> `
+    --partition_strategy iid --num_clients 3 --client_id 0 `
+    --commcrime_random_seed 42 --epochs 1 `
     --run_dir results/fed_run1 --save_name client0
 ```
 
@@ -730,12 +1068,24 @@ To make multi-node and simulation results directly comparable, pass
 `--global_scaler` on every client:
 
 ```bash
+# Linux / macOS / WSL
 python App/TrainingApp/Client/TrainingClient.py \
     --model_type FUSION-MLP --trainingArea Federated \
     --custom-host <HOST_IP> \
     --partition_strategy iid --num_clients 3 --client_id 0 \
     --commcrime_random_seed 42 --epochs 1 \
     --global_scaler \
+    --run_dir results/fed_run1 --save_name client0_gs
+```
+
+```powershell
+# Windows (PowerShell)
+python App/TrainingApp/Client/TrainingClient.py `
+    --model_type FUSION-MLP --trainingArea Federated `
+    --custom-host <HOST_IP> `
+    --partition_strategy iid --num_clients 3 --client_id 0 `
+    --commcrime_random_seed 42 --epochs 1 `
+    --global_scaler `
     --run_dir results/fed_run1 --save_name client0_gs
 ```
 
@@ -762,19 +1112,25 @@ omit the flag and accept a small fidelity gap from the simulation.
 - **Verify TCP reachability before launching the FL processes.** From
   any client machine:
   ```bash
+  # Linux / macOS / WSL
   nc -vz <HOST_IP> 8080
+  ```
+  ```powershell
+  # Windows (PowerShell)
+  Test-NetConnection -ComputerName <HOST_IP> -Port 8080
   ```
   The three useful outcomes:
 
-  | `nc` says | Meaning | Fix |
+  | `nc` says (Linux) / `Test-NetConnection` reports (Windows) | Meaning | Fix |
   |---|---|---|
-  | `Connection ... succeeded` | host process is bound and the firewall is open | proceed |
-  | `Connection refused` | host kernel responded with RST — port is open but **no server process is listening** | start (or restart) the host with `--distributed` |
-  | `No route to host` / `connection timed out` | firewall (host or cloud SG) is dropping the SYN | open TCP/8080; ICMP working (`ping`) doesn't mean TCP works |
+  | `Connection ... succeeded` / `TcpTestSucceeded : True` | host process is bound and the firewall is open | proceed |
+  | `Connection refused` / `TcpTestSucceeded : False` with quick failure | host kernel responded with RST — port is open but **no server process is listening** | start (or restart) the host with `--distributed` |
+  | `No route to host` / `connection timed out` (or `TcpTestSucceeded : False` after a long wait) | firewall (host or cloud SG) is dropping the SYN | open TCP/8080; ICMP working (`ping`) doesn't mean TCP works |
 
 - **ICMP ≠ TCP.** A successful `ping` only proves the kernel routes
   packets to the host. Firewalls routinely allow ICMP while blocking
-  application ports. Always probe with `nc` before debugging Flower.
+  application ports. Always probe with `nc` / `Test-NetConnection`
+  before debugging Flower.
 
 ### 7.5 What you should see
 
@@ -794,9 +1150,9 @@ omit the flag and accept a small fidelity gap from the simulation.
 
 | Symptom | Likely cause | Fix |
 |---|---|---|
-| Client hangs forever after `DEPRECATED FEATURE: start_client()` | gRPC silent connection-retry loop — TCP:8080 unreachable | Run `nc -vz <HOST_IP> 8080` from the client. `No route to host` → firewall. `Connection refused` → host not running. |
-| Client raises `StatusCode.UNAVAILABLE / No route to host` | Firewall blocking inbound TCP 8080 on the host | Open the port (ufw / iptables / cloud SG) |
-| All clients connect but server stays at `[ROUND 1]` | Fewer than `--min_clients` connections established | Check `sudo ss -tnp \| grep 8080` on the host — look for `ESTAB` lines, one per connected client. If they're missing despite the client logs saying "connected," it's gRPC retrying silently — confirm with `nc -vz` |
+| Client hangs forever after `DEPRECATED FEATURE: start_client()` | gRPC silent connection-retry loop — TCP:8080 unreachable | Run `nc -vz <HOST_IP> 8080` (Linux) or `Test-NetConnection -ComputerName <HOST_IP> -Port 8080` (Windows) from the client. `No route to host` / `TcpTestSucceeded : False` → firewall. `Connection refused` → host not running. |
+| Client raises `StatusCode.UNAVAILABLE / No route to host` | Firewall blocking inbound TCP 8080 on the host | Open the port (ufw / iptables / cloud SG; on Windows host: `New-NetFirewallRule -DisplayName "Flower 8080" -Direction Inbound -LocalPort 8080 -Protocol TCP -Action Allow`) |
+| All clients connect but server stays at `[ROUND 1]` | Fewer than `--min_clients` connections established | Check `sudo ss -tnp \| grep 8080` on the host — look for `ESTAB` lines, one per connected client. On Windows host: `Get-NetTCPConnection -LocalPort 8080`. If they're missing despite the client logs saying "connected," it's gRPC retrying silently — confirm with `nc -vz` / `Test-NetConnection` |
 | Each client trains fine but the aggregated model is garbage | Partition-determinism arguments differ across nodes (§7.3) | Pin `--num_clients`, `--partition_strategy`, `--commcrime_random_seed`, and `--drop_sensitive_features` to the same values everywhere |
 | Server reports `min_available_clients` mismatch warnings | One client crashed mid-round — Flower waited it out | Restart the dead client; the server resumes the next round when it reconnects |
 | `--num_clients 2` rejected by argparse | Older copy of `ArgumentConfigLoad.py` before N=2 was added | Pull latest; the supported set is now `{1, 2, 3, 5, 10}` |
