@@ -18,6 +18,23 @@ The Phase 0–D work shipped a complete fusion-centers pipeline + 146-test suite
 
 Chameleon Cloud (the design's deployment target) — see [README.md](../README.md) for AERPAW / Chameleon provisioning scripts. The fusion-centers experiments use the existing CPU-bare-metal pattern; outline §7.3 confirms compute is not the bottleneck.
 
+### 0.0 Activate the venv
+
+Every command in this runbook assumes the project venv is activated:
+
+```bash
+# Linux / macOS / WSL — from the project root
+source .venv/bin/activate
+
+# Windows (PowerShell 7+)
+& .\.venv\Scripts\Activate.ps1
+```
+
+The shell prompt picks up a `(.venv)` prefix when it's active. The
+bootstrap scripts in §0.1 below create this venv automatically. If you
+open a new terminal — including SSH'ing into a fresh host or client
+node — re-run the activation command before invoking anything.
+
 ### 0.1 One-shot deploy to a fresh node
 
 For a clean machine (laptop, VM, Chameleon bare-metal, container), use the
@@ -108,6 +125,19 @@ If any crime-rate column is missing, label engineering silently degrades. Adjust
 ## 2. The six-experiment matrix
 
 Each experiment lives in its own `--run_dir` under `results/`. Set the shared seed (`--commcrime_random_seed`) to the same value across all six so the global test split is identical.
+
+> **Single-node simulation vs. real multi-node.** Every host command in
+> §2 runs `HFLHost.py` *without* `--distributed`, which means clients
+> are spawned as Ray actors in the same process (the deterministic,
+> reproducible default). To run the same configurations across real
+> networked machines instead, add `--distributed` on the host and
+> launch one `TrainingClient.py --trainingArea Federated --custom-host
+> <ip>` per client machine — see §7 for the full procedure and
+> network-debug checklist.
+
+Supported `--num_clients` values: **1, 2, 3, 5, 10**. The N=2
+configuration is useful for two-node hardware setups; the geographic
+partitioner uses an East+Central vs. West split for N=2.
 
 ### 2.1 Experiment 1 — Centralized baseline
 
@@ -345,7 +375,143 @@ The plot scripts parse these via [Analysis/CommunitiesCrime/log_parser.py](../An
 
 ---
 
-## 7. Troubleshooting
+## 7. Real multi-node federation
+
+Single-process simulation (§2) is great for reproducibility but doesn't
+prove anything about wire-time behavior, firewall rules, or partition
+determinism across machines. To run any of the §2 experiments across
+**real, networked nodes**, add `--distributed` to the host invocation
+and launch each client as its own process on its own machine.
+
+### 7.1 Topology
+
+```
+┌──────────────────┐               ┌──────────────────┐
+│  Host machine    │               │  Client machine  │
+│ HFLHost.py       │◄── gRPC 8080 ─┤ TrainingClient.py│
+│ --distributed    │               │ --trainingArea   │
+│ binds [::]:8080  │               │   Federated      │
+└──────────────────┘               │ --custom-host …  │
+        ▲                          └──────────────────┘
+        │  also gRPC 8080
+        │
+   one client process per machine, one per --client_id
+```
+
+The host process must outlive every client. The Flower server stays at
+`[ROUND 1]` (prints that label *before* clients are required) until
+`--min_clients` clients have connected; round 1 only fires after the
+roster fills.
+
+### 7.2 Commands
+
+**On the host machine** (activate venv first):
+
+```bash
+source .venv/bin/activate
+python App/TrainingApp/HFLHost/HFLHost.py \
+    --model_type FUSION-MLP --distributed --fl_strategy FedAvg \
+    --partition_strategy iid --num_clients 3 \
+    --rounds 10 --min_clients 3 --epochs 1 \
+    --commcrime_random_seed 42 \
+    --run_dir results/fed_run1 --save_name fed_run1
+```
+
+Wait for the line `=== FUSION-MLP distributed server on [::]:8080 ===`
+before launching clients.
+
+**On each client machine** (one invocation each, varying `--client_id`):
+
+```bash
+source .venv/bin/activate
+python App/TrainingApp/Client/TrainingClient.py \
+    --model_type FUSION-MLP --trainingArea Federated \
+    --custom-host <HOST_IP> \
+    --partition_strategy iid --num_clients 3 --client_id 0 \
+    --commcrime_random_seed 42 --epochs 1 \
+    --run_dir results/fed_run1 --save_name client0
+```
+
+`<HOST_IP>` is whatever IP the host machine is reachable on from this
+client (LAN, floating IP, or VPN address — must match the side that
+got opened in §7.4). Repeat with `--client_id 1`, `2`, etc. on the
+other client machines.
+
+### 7.3 Partition determinism across machines
+
+Every client AND the host must pass identical values for:
+
+- `--num_clients`
+- `--partition_strategy` (+ `--dirichlet_alpha` if dirichlet)
+- `--commcrime_random_seed`
+- `--drop_sensitive_features` / `--no-drop_sensitive_features`
+
+If any of these differ, each client deterministically computes its own
+(different) partition, and FedAvg silently averages weights trained
+against incompatible label distributions. Macro-F1 numbers will look
+weird but won't error.
+
+> The two-client (`--num_clients 2`) configuration is now supported.
+> Use it for two-node testbed setups; partitioning works for iid /
+> geographic / dirichlet strategies. Note that geographic splits are
+> imbalanced at N=2 (~3.7× more training rows in East+Central than in
+> West) by design.
+
+### 7.4 Network requirements & first-time setup
+
+- **Port 8080 inbound** must be open on the host machine. The Flower
+  server is plaintext gRPC (no TLS) — same threat model as the
+  simulation runs. If you're on Chameleon, ensure the security group
+  allows TCP/8080 from the client subnet. If you're on a Linux host
+  with `ufw` active, run `sudo ufw allow 8080/tcp` once.
+- **The port is hardcoded to 8080** in `TrainingClient.py`. Don't try
+  to bind the server to a different port without also editing the
+  client wiring.
+- **Verify TCP reachability before launching the FL processes.** From
+  any client machine:
+  ```bash
+  nc -vz <HOST_IP> 8080
+  ```
+  The three useful outcomes:
+
+  | `nc` says | Meaning | Fix |
+  |---|---|---|
+  | `Connection ... succeeded` | host process is bound and the firewall is open | proceed |
+  | `Connection refused` | host kernel responded with RST — port is open but **no server process is listening** | start (or restart) the host with `--distributed` |
+  | `No route to host` / `connection timed out` | firewall (host or cloud SG) is dropping the SYN | open TCP/8080; ICMP working (`ping`) doesn't mean TCP works |
+
+- **ICMP ≠ TCP.** A successful `ping` only proves the kernel routes
+  packets to the host. Firewalls routinely allow ICMP while blocking
+  application ports. Always probe with `nc` before debugging Flower.
+
+### 7.5 What you should see
+
+- Host: `[ROUND 1]` appears immediately, then nothing further until
+  all clients connect. Once round 1 completes you'll see per-round
+  metrics in `<run_dir>/server_evaluation.log` (one block per round).
+- Each client: prints the dataset summary, then sits silent on the
+  `start_client()` deprecation warning while the gRPC stream is open.
+  Real training output is per-process Keras epoch lines if `--epochs`
+  is > 1, otherwise just the round-boundary entries in the client's
+  `<run_dir>/<timestamp>_training.log`.
+- Round-1 latency includes every client's first-epoch warmup (TF graph
+  compile + scaler fit). Subsequent rounds finish in well under a
+  second per round for FUSION-MLP / COMMCRIME.
+
+### 7.6 Multi-node troubleshooting checklist
+
+| Symptom | Likely cause | Fix |
+|---|---|---|
+| Client hangs forever after `DEPRECATED FEATURE: start_client()` | gRPC silent connection-retry loop — TCP:8080 unreachable | Run `nc -vz <HOST_IP> 8080` from the client. `No route to host` → firewall. `Connection refused` → host not running. |
+| Client raises `StatusCode.UNAVAILABLE / No route to host` | Firewall blocking inbound TCP 8080 on the host | Open the port (ufw / iptables / cloud SG) |
+| All clients connect but server stays at `[ROUND 1]` | Fewer than `--min_clients` connections established | Check `sudo ss -tnp \| grep 8080` on the host — look for `ESTAB` lines, one per connected client. If they're missing despite the client logs saying "connected," it's gRPC retrying silently — confirm with `nc -vz` |
+| Each client trains fine but the aggregated model is garbage | Partition-determinism arguments differ across nodes (§7.3) | Pin `--num_clients`, `--partition_strategy`, `--commcrime_random_seed`, and `--drop_sensitive_features` to the same values everywhere |
+| Server reports `min_available_clients` mismatch warnings | One client crashed mid-round — Flower waited it out | Restart the dead client; the server resumes the next round when it reconnects |
+| `--num_clients 2` rejected by argparse | Older copy of `ArgumentConfigLoad.py` before N=2 was added | Pull latest; the supported set is now `{1, 2, 3, 5, 10}` |
+
+---
+
+## 8. Troubleshooting
 
 | Symptom | Likely cause | Fix |
 |---|---|---|
@@ -355,4 +521,6 @@ The plot scripts parse these via [Analysis/CommunitiesCrime/log_parser.py](../An
 | FedProx run produces same macro-F1 as FedAvg | `--fedprox_mu` too small | Try `--fedprox_mu 0.1` or `--fedprox_mu 0.5` |
 | `--mode hermes --model_type FUSION-MLP` → `SystemExit` | FUSION-MLP doesn't support hermes | Use `--mode legacy` (the default) |
 
-For the full list of known limitations — particularly things never validated against real UCI data — see [implementation plan §9](Fusion_Centers_FL_Update_Implementation_Plan.md#9-known-limitations--untested-boundaries).
+For multi-node / real-network issues, see §7.6 instead. For the full
+list of known limitations — particularly things never validated against
+real UCI data — see [implementation plan §9](Fusion_Centers_FL_Update_Implementation_Plan.md#9-known-limitations--untested-boundaries).

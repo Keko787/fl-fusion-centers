@@ -23,8 +23,10 @@ diverge below that.
 - [Quickstart: HFL-DNN-GAN-NIDS](#quickstart-hfl-dnn-gan-nids)
 - [Datasets](#datasets)
 - [Usage](#usage)
+  - [Activating the venv](#activating-the-venv)
   - [Fusion Centers — Centralized Training](#fusion-centers--centralized-training)
-  - [Fusion Centers — Federated Training](#fusion-centers--federated-training)
+  - [Fusion Centers — Federated Training (Single-Node Simulation)](#fusion-centers--federated-training-single-node-simulation)
+  - [Fusion Centers — Federated Training (Real Multi-Node)](#fusion-centers--federated-training-real-multi-node)
   - [NIDS — Federated Training (Host)](#nids--federated-training-host)
   - [NIDS — Localized & Federated Training (Client)](#nids--localized--federated-training-client)
 - [Repository Layout](#repository-layout)
@@ -158,6 +160,25 @@ unzip $HOME/datasets/CICIoT2023.zip -d $HOME/datasets/CICIOT2023
 All commands assume the project root is the current directory and the
 appropriate venv is activated.
 
+### Activating the venv
+
+Before running any command in this section, activate the venv that
+`AppSetup/setup_fusion_node.sh` (or your manual install) created:
+
+```bash
+# Linux / macOS / WSL — from the project root
+source .venv/bin/activate
+```
+
+```powershell
+# Windows (PowerShell 7+)
+& .\.venv\Scripts\Activate.ps1
+```
+
+Your shell prompt should now show a `(.venv)` prefix. Run `deactivate`
+to leave the venv. If you Ctrl-C a training run or open a new terminal,
+remember to re-activate.
+
 ### Fusion Centers — Centralized Training
 
 Single-process baseline. Sets the macro-F1 ceiling federated runs are
@@ -172,10 +193,12 @@ python App/TrainingApp/Client/TrainingClient.py \
     --save_name centralized_baseline
 ```
 
-### Fusion Centers — Federated Training
+### Fusion Centers — Federated Training (Single-Node Simulation)
 
-Five-client FedAvg over a geographic non-IID partition (the realistic
-fusion-center scenario):
+Default mode — every "client" is a Ray actor in the same process via
+`fl.simulation.start_simulation`. Use this for reproducible local
+experiments. Five-client FedAvg over a geographic non-IID partition
+(the realistic fusion-center scenario):
 
 ```bash
 python App/TrainingApp/HFLHost/HFLHost.py \
@@ -197,9 +220,72 @@ python App/TrainingApp/HFLHost/HFLHost.py \
     --save_name fedprox_geo_n5
 ```
 
+Supported `--num_clients` values: **1, 2, 3, 5, 10** (geographic
+partitioner ships matching bucket tables for each).
+
 Full experiment matrix (including local-only baseline, IID FedAvg, and
 the N ∈ {3, 5, 10} scaling sweep) is in
 [`RUNNING_FUSION_EXPERIMENTS.md`](DeveloperDocs/RUNNING_FUSION_EXPERIMENTS.md).
+
+### Fusion Centers — Federated Training (Real Multi-Node)
+
+To run FL across real, networked machines instead of a single-process
+simulator, add `--distributed` to the host invocation. The host binds a
+Flower gRPC server on `[::]:8080`; each client is a separate
+`TrainingClient.py --trainingArea Federated` process on its own machine
+that dials the host's IP.
+
+**Host machine** (one — must outlive the run, port 8080 open inbound):
+
+```bash
+source .venv/bin/activate
+python App/TrainingApp/HFLHost/HFLHost.py \
+    --model_type FUSION-MLP --distributed --fl_strategy FedAvg \
+    --partition_strategy iid --num_clients 3 \
+    --rounds 10 --min_clients 3 --epochs 1 \
+    --commcrime_random_seed 42 \
+    --run_dir results/fed_run1 --save_name fed_run1
+```
+
+**Each client machine** (one invocation per client, varying `--client_id`):
+
+```bash
+source .venv/bin/activate
+python App/TrainingApp/Client/TrainingClient.py \
+    --model_type FUSION-MLP --trainingArea Federated \
+    --custom-host <HOST_IP> \
+    --partition_strategy iid --num_clients 3 --client_id 0 \
+    --commcrime_random_seed 42 --epochs 1 \
+    --run_dir results/fed_run1 --save_name client0
+```
+
+Replace `<HOST_IP>` with the host machine's reachable IP. Repeat the
+client command on the other machines varying `--client_id 1`, `2`, etc.
+The server blocks at `[ROUND 1]` until `--min_clients` have connected,
+then rounds proceed automatically.
+
+**Hard requirements for partitions to line up across machines** — every
+client AND the host must pass identical:
+- `--num_clients`, `--partition_strategy` (+ `--dirichlet_alpha` if dirichlet),
+- `--commcrime_random_seed`,
+- `--drop_sensitive_features` / `--no-drop_sensitive_features`.
+
+If any of these differ, clients see different partitions and FL
+silently produces garbage.
+
+**Network requirements:**
+- Port **8080** open on the host firewall (gRPC, plaintext — no TLS).
+- Clients dial `<HOST_IP>:8080` — the port is currently hardcoded.
+- `ping` works ≠ TCP:8080 works. Verify with `nc -vz <HOST_IP> 8080`
+  from a client *before* you start the FL processes.
+
+**Client-count limits:** Same as simulation —
+`--num_clients ∈ {1, 2, 3, 5, 10}`. For only 2 clients pass
+`--num_clients 2 --min_clients 2`; the geographic partitioner uses a
+2-way East+Central vs. West split.
+
+See [`RUNNING_FUSION_EXPERIMENTS.md` §7](DeveloperDocs/RUNNING_FUSION_EXPERIMENTS.md#7-real-multi-node-federation)
+for the firewall / port troubleshooting checklist.
 
 ### NIDS — Federated Training (Host)
 
