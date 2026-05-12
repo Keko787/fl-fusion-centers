@@ -58,6 +58,12 @@ _BUCKETS_N3: dict[int, tuple[str, ...]] = {
     2: _BUCKETS_N5[4],                    # West
 }
 
+# N=2 buckets — collapse the N=3 partitioning into East+Central vs West.
+_BUCKETS_N2: dict[int, tuple[str, ...]] = {
+    0: _BUCKETS_N3[0] + _BUCKETS_N3[1],  # East + Central
+    1: _BUCKETS_N3[2],                    # West
+}
+
 # N=10 buckets — Census Bureau 9 divisions with the South Atlantic split.
 _BUCKETS_N10: dict[int, tuple[str, ...]] = {
     0: ("CT", "ME", "MA", "NH", "RI", "VT"),                       # New England
@@ -81,7 +87,7 @@ _BUCKETS_N1: dict[int, tuple[str, ...]] = {
 }
 
 _BUCKET_TABLES: dict[int, dict[int, tuple[str, ...]]] = {
-    1: _BUCKETS_N1, 3: _BUCKETS_N3, 5: _BUCKETS_N5, 10: _BUCKETS_N10,
+    1: _BUCKETS_N1, 2: _BUCKETS_N2, 3: _BUCKETS_N3, 5: _BUCKETS_N5, 10: _BUCKETS_N10,
 }
 
 

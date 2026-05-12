@@ -54,8 +54,8 @@ def parse_training_client_args():
                         help="Path to the UCI Communities-Crime raw CSV. If omitted, the loader reads from $HOME/datasets/CommunitiesCrime/ and downloads on first run.")
     parser.add_argument("--commcrime_random_seed", type=int, default=42,
                         help="Seed for all stochastic COMMCRIME steps (partition, IID shuffle, Dirichlet, train/val).")
-    parser.add_argument("--num_clients", type=int, choices=[1, 3, 5, 10], default=5,
-                        help="Number of simulated agencies for FUSION-MLP partitioning. Choices: 3, 5, 10.")
+    parser.add_argument("--num_clients", type=int, choices=[1, 2, 3, 5, 10], default=5,
+                        help="Number of simulated agencies for FUSION-MLP partitioning. Choices: 1, 2, 3, 5, 10.")
     parser.add_argument("--partition_strategy", type=str,
                         choices=["geographic", "iid", "dirichlet"], default="geographic",
                         help="How to split COMMCRIME across clients. Default: geographic (state→region bucket).")
@@ -370,7 +370,7 @@ def parse_HFL_Host_args():
                         help="Path to the UCI Communities-Crime raw CSV. Default: $HOME/datasets/CommunitiesCrime/.")
     parser.add_argument("--commcrime_random_seed", type=int, default=42,
                         help="Seed for all stochastic COMMCRIME steps.")
-    parser.add_argument("--num_clients", type=int, choices=[1, 3, 5, 10], default=5,
+    parser.add_argument("--num_clients", type=int, choices=[1, 2, 3, 5, 10], default=5,
                         help="Number of simulated agency clients for FUSION-MLP simulation.")
     parser.add_argument("--partition_strategy", type=str,
                         choices=["geographic", "iid", "dirichlet"], default="geographic",
