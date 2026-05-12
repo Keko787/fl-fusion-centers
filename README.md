@@ -470,11 +470,21 @@ controlled-skew ablation.
 
 ## Documentation
 
+> **Running the experiments? Start here:**
+> **[`DeveloperDocs/RUNNING_FUSION_EXPERIMENTS.md`](DeveloperDocs/RUNNING_FUSION_EXPERIMENTS.md)**
+>
+> The runbook is the working manual — it covers data acquisition, the
+> six-experiment matrix with both single-node simulation and real
+> multi-node commands, how to choose between the two modes, figure
+> regeneration, and a network-debug checklist. The design and
+> implementation-plan docs below are reference material; the runbook
+> is what you actually need open while running experiments.
+
 | Doc | Purpose |
 |---|---|
-| [`DeveloperDocs/Fusion_Centers_FL_Update_Design.md`](DeveloperDocs/Fusion_Centers_FL_Update_Design.md) | Design document — pipeline stages, threat model, math, as-built deviations |
-| [`DeveloperDocs/Fusion_Centers_FL_Update_Implementation_Plan.md`](DeveloperDocs/Fusion_Centers_FL_Update_Implementation_Plan.md) | Phased plan + per-phase build outcomes, §8 review log, §9 known limitations |
-| [`DeveloperDocs/RUNNING_FUSION_EXPERIMENTS.md`](DeveloperDocs/RUNNING_FUSION_EXPERIMENTS.md) | Operational runbook — six-experiment matrix, ablations, figure regeneration, troubleshooting |
+| **[`DeveloperDocs/RUNNING_FUSION_EXPERIMENTS.md`](DeveloperDocs/RUNNING_FUSION_EXPERIMENTS.md)** | **Operational runbook — start here.** Six-experiment matrix (§2), sim vs. real multi-node recommendations (§2.7), sensitive-features ablation (§3), figure regeneration (§4), real multi-node procedure with firewall checklist (§7), troubleshooting (§8). |
+| [`DeveloperDocs/Fusion_Centers_FL_Update_Design.md`](DeveloperDocs/Fusion_Centers_FL_Update_Design.md) | Design reference — pipeline stages, threat model, math, as-built deviations. Read this when you need to understand *why* the pipeline looks the way it does. |
+| [`DeveloperDocs/Fusion_Centers_FL_Update_Implementation_Plan.md`](DeveloperDocs/Fusion_Centers_FL_Update_Implementation_Plan.md) | Phased build plan + per-phase outcomes, §8 review log, §9 known limitations. Read this when you need to know what was deferred, what's still untested, or why a given design decision was made. |
 
 ---
 
