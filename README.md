@@ -85,12 +85,30 @@ source .venv/bin/activate
 ```
 
 ```powershell
-# Windows (PowerShell 7+)
+# Windows — works with both Windows PowerShell 5.1 (built-in) and PowerShell 7+
 git clone https://github.com/Keko787/fl-fusion-centers.git
 cd fl-fusion-centers
-pwsh -File AppSetup\setup_fusion_node.ps1 -Verify
+
+# Option A: use the PowerShell that ships with Windows (no install needed)
+powershell -ExecutionPolicy Bypass -File AppSetup\setup_fusion_node.ps1 -Verify
+
+# Option B: use PowerShell 7+ (install once via winget)
+#   winget install --id Microsoft.PowerShell --source winget
+#   then in a new pwsh terminal:
+# pwsh -File AppSetup\setup_fusion_node.ps1 -Verify
+
+# Activate the venv it created (any PowerShell):
 & .\.venv\Scripts\Activate.ps1
 ```
+
+> **`pwsh` not found?** That command is PowerShell 7+, which is a
+> separate install from the `powershell.exe` that ships with Windows.
+> Use Option A above (the script is compatible with both versions —
+> 5.1's built-in `powershell` works identically). The
+> `-ExecutionPolicy Bypass` flag is only needed if your machine's
+> default execution policy blocks unsigned local scripts; you can
+> drop it if you've run `Set-ExecutionPolicy -Scope CurrentUser
+> RemoteSigned` previously.
 
 Container alternative:
 

@@ -52,10 +52,22 @@ bash AppSetup/setup_fusion_node.sh --verify   # also run pytest tests/unit -k fu
 ```
 
 ```powershell
-# Windows (PowerShell 7+)
-pwsh -File AppSetup\setup_fusion_node.ps1
-pwsh -File AppSetup\setup_fusion_node.ps1 -Verify
+# Windows — works with both Windows PowerShell 5.1 (built-in) and PowerShell 7+
+
+# Built-in PowerShell (no install needed):
+powershell -ExecutionPolicy Bypass -File AppSetup\setup_fusion_node.ps1
+powershell -ExecutionPolicy Bypass -File AppSetup\setup_fusion_node.ps1 -Verify
+
+# PowerShell 7+ (install once via `winget install Microsoft.PowerShell`):
+# pwsh -File AppSetup\setup_fusion_node.ps1 -Verify
 ```
+
+If `pwsh` reports "term not recognized," that's PowerShell 7+ — a
+separate install from the `powershell.exe` Windows ships with. The
+script is compatible with both, so use the `powershell` form above. The
+`-ExecutionPolicy Bypass` flag is only needed when the default execution
+policy blocks unsigned local scripts (the default on a fresh Windows
+install).
 
 If you'd rather ship a container, build the slim image:
 
