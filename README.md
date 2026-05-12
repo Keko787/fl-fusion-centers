@@ -63,6 +63,20 @@ Python 3.9 is the minimum for Fusion Centers because
 `argparse.BooleanOptionalAction` is used by the `--drop_sensitive_features`
 flag. TensorFlow 2.15–2.21 and Flower 1.19+ are supported.
 
+**On Windows:** make sure `python --version` prints an actual version
+(`3.x.y`) before running the bootstrap script. If it prints "Python was
+not found, run without arguments to install from the Microsoft Store…",
+that's the Windows app-execution-alias stub — real Python isn't
+installed. Install it with:
+
+```powershell
+winget install --id Python.Python.3.12 --source winget
+```
+
+…then **close and reopen the terminal** so the new PATH is picked up.
+If the stub still shadows the real install, turn it off in
+**Settings → Apps → Advanced app settings → App execution aliases**.
+
 ---
 
 ## Quickstart: Fusion Centers FL
