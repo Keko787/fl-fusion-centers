@@ -54,12 +54,16 @@ bash AppSetup/setup_fusion_node.sh --verify   # also run pytest tests/unit -k fu
 ```powershell
 # Windows — works with both Windows PowerShell 5.1 (built-in) and PowerShell 7+
 
-# Built-in PowerShell (no install needed):
+# Built-in PowerShell, default `python` on PATH:
 powershell -ExecutionPolicy Bypass -File AppSetup\setup_fusion_node.ps1
 powershell -ExecutionPolicy Bypass -File AppSetup\setup_fusion_node.ps1 -Verify
 
+# Built-in PowerShell, using the `py` launcher (recommended — bypasses the
+# Microsoft Store python.exe stub even if `python` would otherwise hit it):
+powershell -ExecutionPolicy Bypass -File AppSetup\setup_fusion_node.ps1 -Verify -PythonBin py
+
 # PowerShell 7+ (install once via `winget install Microsoft.PowerShell`):
-# pwsh -File AppSetup\setup_fusion_node.ps1 -Verify
+# pwsh -File AppSetup\setup_fusion_node.ps1 -Verify -PythonBin py
 ```
 
 If `pwsh` reports "term not recognized," that's PowerShell 7+ — a

@@ -122,10 +122,16 @@ cd fl-fusion-centers
 # Option A: use the PowerShell that ships with Windows (no install needed)
 powershell -ExecutionPolicy Bypass -File AppSetup\setup_fusion_node.ps1 -Verify
 
+# Option A' (recommended on Windows): pass -PythonBin py to use the py launcher.
+#   Bypasses the Microsoft Store python.exe stub entirely. Safe to use even when
+#   `python --version` works correctly — `py.exe` is the standard launcher
+#   shipped with the python.org / winget Python install.
+powershell -ExecutionPolicy Bypass -File AppSetup\setup_fusion_node.ps1 -Verify -PythonBin py
+
 # Option B: use PowerShell 7+ (install once via winget)
 #   winget install --id Microsoft.PowerShell --source winget
 #   then in a new pwsh terminal:
-# pwsh -File AppSetup\setup_fusion_node.ps1 -Verify
+# pwsh -File AppSetup\setup_fusion_node.ps1 -Verify -PythonBin py
 
 # Activate the venv it created (any PowerShell):
 & .\.venv\Scripts\Activate.ps1
