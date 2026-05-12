@@ -64,37 +64,55 @@ function Warn ([string]$msg) { Write-Host "`n[warn]  $msg" -ForegroundColor Yell
 function Fail ([string]$msg) { Write-Host "`n[fail]  $msg" -ForegroundColor Red; exit 1 }
 
 # ── 1. Check Python ─────────────────────────────────────────────────────
-$pyCmd = Get-Command $PythonBin -ErrorAction SilentlyContinue
-if (-not $pyCmd) {
-    Fail "python not found on PATH. Install Python 3.9+ from python.org or via 'winget install Python.Python.3.12'."
+# Probe a candidate `python`-style command and return the reported version
+# if it actually runs (or $null if it's the Windows app-execution-alias stub
+# / a broken install). Used to validate $PythonBin and to try `py` as a
+# fallback below.
+function Test-PythonCmd {
+    param([string]$Bin)
+    $cmd = Get-Command $Bin -ErrorAction SilentlyContinue
+    if (-not $cmd) { return $null }
+    $out = (& $Bin -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')" 2>&1 | Out-String).Trim()
+    if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrEmpty($out) -or $out -notmatch '^\d+\.\d+$') {
+        return $null
+    }
+    return [pscustomobject]@{ Bin = $Bin; Version = $out; Source = $cmd.Source }
 }
-# On Windows, `python` on PATH may be Microsoft's app-execution-alias stub
-# that prints "Python was not found..." and redirects to the Microsoft Store
-# when real Python isn't installed. Probe the version directly and treat
-# empty / non-version output as missing rather than letting .Trim() blow up
-# on a null result later in the script.
-$pyVerRaw = (& $PythonBin -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')" 2>&1 | Out-String).Trim()
-if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrEmpty($pyVerRaw) -or $pyVerRaw -notmatch '^\d+\.\d+$') {
+
+$pyInfo = Test-PythonCmd $PythonBin
+
+# If the user didn't override -PythonBin and the default `python` resolved
+# to the Microsoft Store stub, transparently fall back to the `py` launcher.
+# `py.exe` ships at C:\Windows\py.exe and is immune to the app-execution
+# -alias PATH-shadowing issue.
+if (-not $pyInfo -and $PythonBin -eq "python") {
+    Warn "python on PATH is the Microsoft Store stub (or otherwise broken). Trying 'py' launcher..."
+    $pyInfo = Test-PythonCmd "py"
+    if ($pyInfo) { $PythonBin = "py" }
+}
+
+if (-not $pyInfo) {
     Fail @"
-python found on PATH at $($pyCmd.Source), but it failed to report a version.
+python (or py) on PATH could not be invoked to report a version.
 
 This is almost always the Windows Microsoft Store stub (it prints
 "Python was not found, run without arguments to install from the
-Microsoft Store..." and exits without producing output).
+Microsoft Store..." and exits without producing output), or a broken
+install with no usable python.exe / py.exe on PATH.
 
-Fixes:
+Fixes (any one is enough):
   1. Install real Python 3.9+ via:
        winget install --id Python.Python.3.12 --source winget
-     (then close and reopen this PowerShell terminal so PATH is picked up).
-  2. Or disable the Microsoft Store alias:
+     then close and reopen this PowerShell terminal so PATH is picked up.
+  2. Disable the Microsoft Store alias:
        Settings -> Apps -> Advanced app settings -> App execution aliases
        -> toggle off python.exe and python3.exe.
-
-Got output (may be empty): $pyVerRaw
+  3. Re-run this script with the py launcher explicitly:
+       powershell -ExecutionPolicy Bypass -File AppSetup\setup_fusion_node.ps1 -Verify -PythonBin py
 "@
 }
-$pyVer = $pyVerRaw
-Log "Using Python $pyVer from $($pyCmd.Source)"
+$pyVer = $pyInfo.Version
+Log "Using Python $pyVer from $($pyInfo.Source)  (-PythonBin $PythonBin)"
 
 # ── 2. Create venv ──────────────────────────────────────────────────────
 if (-not (Test-Path $VenvDir)) {

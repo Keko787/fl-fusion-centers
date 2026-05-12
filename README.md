@@ -74,8 +74,24 @@ winget install --id Python.Python.3.12 --source winget
 ```
 
 …then **close and reopen the terminal** so the new PATH is picked up.
-If the stub still shadows the real install, turn it off in
-**Settings → Apps → Advanced app settings → App execution aliases**.
+
+If `python` still resolves to the stub even after install (you can
+check with `where.exe python` — the stub at `WindowsApps\python.exe`
+will appear first), you have three options:
+
+1. **Use the `py` launcher** — install adds `C:\Windows\py.exe` which
+   is immune to the alias issue. Pass it to the setup script:
+   ```powershell
+   powershell -ExecutionPolicy Bypass -File AppSetup\setup_fusion_node.ps1 -Verify -PythonBin py
+   ```
+   The script also auto-falls-back to `py` if it detects the stub, so
+   `-PythonBin py` is only needed for older versions of the script.
+2. **Disable the Microsoft Store alias** in
+   **Settings → Apps → Advanced app settings → App execution aliases**
+   (toggle off `python.exe` and `python3.exe`), then reopen the
+   terminal.
+3. **Reorder PATH** so `C:\Users\<you>\AppData\Local\Programs\Python\PythonNNN\`
+   appears before `WindowsApps`.
 
 ---
 
