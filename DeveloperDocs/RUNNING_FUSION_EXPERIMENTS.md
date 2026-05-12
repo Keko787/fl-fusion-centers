@@ -139,6 +139,11 @@ Supported `--num_clients` values: **1, 2, 3, 5, 10**. The N=2
 configuration is useful for two-node hardware setups; the geographic
 partitioner uses an East+Central vs. West split for N=2.
 
+> **Which mode should I run?** Each FL experiment below lists both a
+> simulation command and a real multi-node variant — they answer
+> different questions. See [§2.7](#27-choosing-simulation-vs-real-multi-node-for-experiments-46)
+> for per-experiment recommendations before you pick.
+
 ### 2.1 Experiment 1 — Centralized baseline
 
 ```bash
@@ -386,6 +391,61 @@ Every machine must agree on `--num_clients` and `--partition_strategy`
 **Feeds figure:** §4.3 (scaling — best smoothed macro-F1 + rounds to
 convergence vs N). Needs all three N runs to produce the bar/line
 plot.
+
+### 2.7 Choosing simulation vs. real multi-node for experiments 4–6
+
+Every FL experiment in §2 documents both a single-node simulation
+command and a real multi-node variant. They're not interchangeable —
+pick based on what claim the experiment is meant to support.
+
+**Trade-offs:**
+
+| Dimension | Single-node simulation | Real multi-node |
+|---|---|---|
+| Determinism | Bit-reproducible at a given seed | Non-deterministic (network jitter, OS scheduling, TF drift) |
+| Wall-clock per run | Fast (no gRPC, one TF startup) | Slower (gRPC + per-machine TF warmup × N) |
+| Hardware needed | 1 machine | N+1 machines + working network |
+| Faithful to deployment? | No — skips the gRPC stack, firewall, real I/O | Yes — exercises the whole stack |
+| Scaler default | Global (union of all clients' training rows) | Per-client (each client fits locally — §7.3.1) |
+| Sim ↔ multi-node match | — | Pass `--global_scaler` on every client to match sim bit-for-bit |
+| Debuggability | One stack trace, one log dir | Logs scattered across N+1 machines |
+| Supports a claim like… | "FedProx beats FedAvg under non-IID drift" | "This works on Chameleon / real hardware" |
+
+**Per-experiment recommendation:**
+
+| Experiment | Primary mode | Multi-node use case |
+|---|---|---|
+| **Exp 4** — FedAvg / non-IID geographic (headline accuracy) | **Simulation.** The paper's headline number — needs bit-reproducibility. | One multi-node run with `--global_scaler` as a deployment-validation supplement. |
+| **Exp 5** — FedProx / non-IID geographic (robustness) | **Simulation.** Cleanest A/B against FedAvg on the same partition; network nondeterminism would only add noise to the proximal-term comparison. | Only if you're making a separate stragglers / failure-recovery claim about FedProx — otherwise skip. |
+| **Exp 6** — Scaling sweep (N=3, 5, 10) | **Simulation only.** Scaling is an algorithmic claim (does macro-F1 degrade as N grows?). Real multi-node would conflate algorithmic and systems scaling, and standing up 10 real machines for one bar chart is overkill. | Run a separate "systems scaling" figure with `--metric round_seconds` and `--metric parameter_update_wire_bytes` if you want wall-clock and wire-overhead numbers — that's a different plot, not the macro-F1 scaling claim. |
+
+**A clean publishable workflow:**
+
+1. Run all six experiments in §2 in simulation with a fixed
+   `--commcrime_random_seed`. These produce the reproducible headline
+   numbers in the paper.
+2. Re-run **one** experiment (typically Exp 4, since it's the core
+   non-IID result) in real multi-node mode with `--global_scaler` and
+   the same seed. Cite it as deployment validation: "the simulation
+   result is confirmed by an end-to-end multi-node run with
+   macro-F1 = X.XX."
+3. Save Exp 5 / Exp 6 multi-node runs for follow-on work — only run
+   them now if a reviewer specifically asks or your deployment story
+   needs it.
+
+**When to deviate:** if your hardware allocation is already N nodes
+(e.g., a long-running Chameleon reservation), real multi-node costs
+roughly the same effort as simulation. In that case run every
+experiment both ways: simulation for the paper, multi-node for your
+own confidence, cite the sim numbers in the writeup.
+
+**One nuance about the realism vs. fidelity trade-off:** the per-client
+scaler default for multi-node is actually *more* realistic than the
+simulation's global scaler (real fusion centers can't see each other's
+data even for normalization). `--global_scaler` is a convenience for
+direct sim-vs-multi-node comparison, not the privacy-preserving
+default. Pick consciously; document which mode each headline number
+came from.
 
 ---
 
