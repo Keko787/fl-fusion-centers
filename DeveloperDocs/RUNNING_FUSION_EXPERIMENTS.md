@@ -617,17 +617,61 @@ Every client AND the host must pass identical values for:
 - `--partition_strategy` (+ `--dirichlet_alpha` if dirichlet)
 - `--commcrime_random_seed`
 - `--drop_sensitive_features` / `--no-drop_sensitive_features`
+- `--global_scaler` (see §7.3.1) — must be set the same way on every
+  client, or different clients will train against features on
+  incompatible scales
 
 If any of these differ, each client deterministically computes its own
-(different) partition, and FedAvg silently averages weights trained
-against incompatible label distributions. Macro-F1 numbers will look
-weird but won't error.
+(different) partition or features, and FedAvg silently averages
+weights trained against incompatible distributions. Macro-F1 numbers
+will look weird but won't error.
 
 > The two-client (`--num_clients 2`) configuration is now supported.
 > Use it for two-node testbed setups; partitioning works for iid /
 > geographic / dirichlet strategies. Note that geographic splits are
 > imbalanced at N=2 (~3.7× more training rows in East+Central than in
 > West) by design.
+
+#### 7.3.1 Global vs per-client scaler — and how to match the simulation
+
+Two preprocessing modes are available:
+
+| Mode | Flag | Scaler fit on | Use when |
+|---|---|---|---|
+| **Per-client (default)** | _(omit)_ | each client's local training rows only | the realistic privacy story — clients never see each other's data, even at preprocessing time |
+| **Global** | `--global_scaler` | union of every client's training rows | reproducing the simulation runner's results bit-for-bit at the same `--commcrime_random_seed` |
+
+The simulation runner uses the global scaler unconditionally (outline
+§6.5 "global standardization"). Distributed clients default to
+per-client scalers because in a true fusion-center deployment each
+agency cannot see another's data. The cost: per-client and global
+scalers can disagree by **10–16 standard deviations** on some
+features (verified on the iid / N=3 / seed=42 split), which causes
+the multi-node macro-F1 to drift from the simulation's even when the
+seed matches.
+
+To make multi-node and simulation results directly comparable, pass
+`--global_scaler` on every client:
+
+```bash
+python App/TrainingApp/Client/TrainingClient.py \
+    --model_type FUSION-MLP --trainingArea Federated \
+    --custom-host <HOST_IP> \
+    --partition_strategy iid --num_clients 3 --client_id 0 \
+    --commcrime_random_seed 42 --epochs 1 \
+    --global_scaler \
+    --run_dir results/fed_run1 --save_name client0_gs
+```
+
+This requires every distributed client to have the full COMMCRIME raw
+archive on its local filesystem. Since partitioning is deterministic
+from `--commcrime_random_seed`, every node independently computes the
+same global scaler — no out-of-band file shipping needed. The cost is
+a small amount of redundant compute per client (~2 KB of CSV, fits the
+scaler in well under a second).
+
+If you want the realistic privacy threat model (per-client scalers),
+omit the flag and accept a small fidelity gap from the simulation.
 
 ### 7.4 Network requirements & first-time setup
 

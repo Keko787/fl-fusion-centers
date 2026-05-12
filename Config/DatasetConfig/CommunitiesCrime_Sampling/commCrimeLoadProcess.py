@@ -142,6 +142,52 @@ def load_commcrime(args):
     )
 
 
+def load_commcrime_via_simulation(args):
+    """Client-side loader that uses the same global scaler as the simulation.
+
+    Counterpart to :func:`load_commcrime` for distributed FL. Where
+    ``load_commcrime`` fits a scaler from the calling client's training
+    partition alone, this function fits the scaler on the **union** of
+    every client's training partition — exactly what
+    :func:`load_commcrime_for_simulation` does for in-process runs —
+    then returns only the ``--client_id`` slice. Used when
+    ``TrainingClient.py --trainingArea Federated --global_scaler`` so
+    distributed runs are bit-comparable to the simulation at the same
+    ``--commcrime_random_seed``.
+
+    Returns the standard ``(X_train, X_val, y_train, y_val, X_test,
+    y_test)`` 6-tuple. ``y_train`` / ``y_val`` / ``y_test`` are
+    ``(y_class, y_escalation)`` pairs, matching every other COMMCRIME
+    loader.
+
+    Every distributed client must have the full COMMCRIME raw archive
+    on its local filesystem — the partition step reads every row to
+    assign it to a client, regardless of which slice is kept here.
+    """
+    cid = int(args.client_id)
+    if cid < 0 or cid >= int(args.num_clients):
+        raise ValueError(
+            f"--client_id {cid} out of range for --num_clients {args.num_clients}"
+        )
+    # Mask client_id around the underlying call to avoid the simulation
+    # path's "client_id is ignored" warning (which is true for the
+    # simulation but misleading here — we DO consume the client_id, just
+    # at the extract step rather than the partition step).
+    saved_cid = args.client_id
+    args.client_id = 0
+    try:
+        sim = load_commcrime_for_simulation(args)
+    finally:
+        args.client_id = saved_cid
+    slot = sim[cid]
+    X_test, y_test = sim["global_test"]
+    return (
+        slot["X_train"], slot["X_val"],
+        slot["y_train"], slot["y_val"],
+        X_test, y_test,
+    )
+
+
 def load_commcrime_for_simulation(args) -> dict:
     """Phase C entry — load all clients' partitions in one pass.
 

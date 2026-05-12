@@ -72,6 +72,8 @@ def parse_training_client_args():
                         help="Drop documented-bias columns (race, ethnicity, income) before training. Default: True per design doc §8.4. Use --no-drop_sensitive_features for the Phase E ablation row.")
     parser.add_argument("--run_dir", type=str, default=None,
                         help="Re-use an existing fusion-centers run dir (frozen global test split, shared partition stats). If omitted a fresh timestamped dir is created under results/. Required for multi-process FL where every client must read the same global test set.")
+    parser.add_argument("--global_scaler", action="store_true",
+                        help="Fit the feature scaler on the union of all clients' training partitions (the simulation-runner behavior) instead of just this client's local data. Produces results bit-comparable to the single-node simulation at the same --commcrime_random_seed. Requires every distributed client to have access to the full COMMCRIME raw archive locally.")
 
     # ─── Federation Settings ───
     parser.add_argument('--trainingArea', type=str, choices=["Central", "Federated"], default="Central",

@@ -83,10 +83,16 @@ def datasetLoadProcess(args):
     elif dataset_used == "COMMCRIME":
         # Fusion-centers data path (Phase A.5 / design doc §3.2). The
         # implementation lives in the COMMCRIME package so it can be
-        # imported by tests without the legacy flwr/tf stack.
+        # imported by tests without the legacy flwr/tf stack. With
+        # --global_scaler, route through the simulation-style loader so
+        # distributed FL clients use the same union-fit StandardScaler
+        # the in-process simulator does (results bit-comparable at the
+        # same seed).
         from Config.DatasetConfig.CommunitiesCrime_Sampling.commCrimeLoadProcess import (
-            load_commcrime,
+            load_commcrime, load_commcrime_via_simulation,
         )
+        if getattr(args, "global_scaler", False):
+            return load_commcrime_via_simulation(args)
         return load_commcrime(args)
 
     elif dataset_used == "NIBRS":

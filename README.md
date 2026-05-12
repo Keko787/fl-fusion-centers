@@ -285,6 +285,17 @@ silently produces garbage.
 `--num_clients 2 --min_clients 2`; the geographic partitioner uses a
 2-way East+Central vs. West split.
 
+**Bit-comparable to the simulation** — add `--global_scaler` on every
+client to fit the feature scaler on the union of all clients' training
+partitions (what the in-process simulator does), instead of fitting
+each client's scaler locally. Without this flag, multi-node and
+simulation feature matrices differ by ~10–16 standard deviations on
+some features, which makes accuracy numbers diverge slightly. Every
+client must have access to the full COMMCRIME raw archive locally
+(partition is deterministic from the seed, so each node computes the
+same global scaler). Use this flag when you want sim and multi-node
+runs to produce the same macro-F1 at the same seed.
+
 See [`RUNNING_FUSION_EXPERIMENTS.md` §7](DeveloperDocs/RUNNING_FUSION_EXPERIMENTS.md#7-real-multi-node-federation)
 for the firewall / port troubleshooting checklist.
 
