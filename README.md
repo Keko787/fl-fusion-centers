@@ -27,6 +27,7 @@ diverge below that.
   - [Fusion Centers — Centralized Training](#fusion-centers--centralized-training)
   - [Fusion Centers — Federated Training (Single-Node Simulation)](#fusion-centers--federated-training-single-node-simulation)
   - [Fusion Centers — Federated Training (Real Multi-Node)](#fusion-centers--federated-training-real-multi-node)
+  - [Fusion Centers — Generating Figures](#fusion-centers--generating-figures)
   - [NIDS — Federated Training (Host)](#nids--federated-training-host)
   - [NIDS — Localized & Federated Training (Client)](#nids--localized--federated-training-client)
 - [Repository Layout](#repository-layout)
@@ -286,6 +287,61 @@ silently produces garbage.
 
 See [`RUNNING_FUSION_EXPERIMENTS.md` §7](DeveloperDocs/RUNNING_FUSION_EXPERIMENTS.md#7-real-multi-node-federation)
 for the firewall / port troubleshooting checklist.
+
+### Fusion Centers — Generating Figures
+
+After running any experiment, the three plot scripts in
+[`Analysis/CommunitiesCrime/`](Analysis/CommunitiesCrime/) read directly
+from the `--run_dir` artifacts (no separate logging pass needed). Make
+sure the venv is active first.
+
+```bash
+source .venv/bin/activate
+```
+
+**Per-client class distribution** (uses one run's `partition_stats.json`
+— shows the non-IID character of the partition):
+
+```bash
+python -m Analysis.CommunitiesCrime.plot_per_client_distribution \
+    --run_dir results/exp4_fedavg_geo \
+    --output results/figures/per_client_distribution_geo_n5.png
+```
+
+**Headline convergence** (overlays one or more FL runs' macro-F1 over
+rounds, with the centralized result as a horizontal reference line —
+substitute the actual centralized macro-F1 from experiment 1's
+`<run_dir>/<timestamp>_evaluation.log`):
+
+```bash
+python -m Analysis.CommunitiesCrime.plot_centralized_vs_federated \
+    --runs FedAvg-IID=results/exp3_fedavg_iid \
+           FedAvg-geo=results/exp4_fedavg_geo \
+           FedProx-geo=results/exp5_fedprox_geo \
+    --centralized-baseline 0.62 \
+    --output results/figures/headline.png
+```
+
+**Scaling sweep** (best smoothed macro-F1 + rounds-to-convergence vs N
+— needs the three runs from experiment 6):
+
+```bash
+python -m Analysis.CommunitiesCrime.plot_scaling_n_clients \
+    --runs 3=results/exp6_scaling_n3 \
+           5=results/exp6_scaling_n5 \
+           10=results/exp6_scaling_n10 \
+    --output results/figures/scaling_n_clients.png
+```
+
+All three scripts accept `--style paper` for camera-ready output (300
+DPI, larger fonts, no top/right spines). The output extension picks the
+format — `.png`, `.pdf`, `.svg`, `.eps` all work.
+
+The headline script also accepts arbitrary metrics from the server log
+via `--metric` (e.g. `proximal_contribution`, `parameter_update_wire_bytes`,
+`fairness_accuracy_variance`). See
+[`RUNNING_FUSION_EXPERIMENTS.md` §4](DeveloperDocs/RUNNING_FUSION_EXPERIMENTS.md#4-figures-phase-e4)
+for the full metric list and ablation/overhead figure recipes.
 
 ### NIDS — Federated Training (Host)
 

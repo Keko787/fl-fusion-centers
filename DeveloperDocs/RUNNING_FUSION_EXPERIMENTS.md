@@ -160,6 +160,9 @@ else runs.
 
 Sets the macro-F1 ceiling. Phase B DoD threshold is `> 0.55` on the global test set. After this run, capture the number from `<run_dir>/<timestamp>_evaluation.log` for the `--centralized-baseline` argument to the headline plot.
 
+**Feeds figure:** §4.2 (headline convergence — its macro-F1 is the
+horizontal reference line).
+
 ### 2.2 Experiment 2 — Local-only (per client, no FL)
 
 **One machine, sequential loop:**
@@ -197,6 +200,10 @@ There's no host process for this experiment — each agency trains in
 isolation on its own partition. Lower-bound result — agencies operating
 in isolation. Use these client-by-client macro-F1 values to compute the
 "siloed performance" baseline.
+
+**Feeds figure:** none of the three primary plots directly — the
+local-only macro-F1 numbers are reported in tables, not on the
+convergence curve.
 
 ### 2.3 Experiment 3 — FedAvg / IID
 
@@ -239,6 +246,9 @@ python App/TrainingApp/Client/TrainingClient.py \
 
 Sanity check — federation works in the easy case. Phase C DoD: macro-F1 within ±0.02 of centralized.
 
+**Feeds figure:** §4.2 (headline convergence — appears as the
+`FedAvg-IID` series).
+
 ### 2.4 Experiment 4 — FedAvg / non-IID geographic
 
 **Host (single-node simulation — default):**
@@ -277,6 +287,10 @@ python App/TrainingApp/Client/TrainingClient.py \
 ```
 
 Core result — realistic fusion-center scenario.
+
+**Feeds figures:** §4.1 (per-client class distribution — shows the
+non-IID character of this run's geographic partition) and §4.2
+(headline convergence — `FedAvg-geo` series).
 
 ### 2.5 Experiment 5 — FedProx / non-IID geographic
 
@@ -323,6 +337,9 @@ changes between FedAvg and FedProx runs.
 
 Robustness-to-drift claim — Phase D DoD: macro-F1 ≥ FedAvg on the same partition.
 
+**Feeds figures:** §4.2 (headline convergence — `FedProx-geo` series)
+and §4.4 (proximal-term evolution via `--metric proximal_contribution`).
+
 ### 2.6 Experiment 6 — Scaling sweep
 
 **Host (single-node simulation, sweep over N — default):**
@@ -366,6 +383,10 @@ python App/TrainingApp/Client/TrainingClient.py \
 Every machine must agree on `--num_clients` and `--partition_strategy`
 — see §7.3 for the full pinned-args list.
 
+**Feeds figure:** §4.3 (scaling — best smoothed macro-F1 + rounds to
+convergence vs N). Needs all three N runs to produce the bar/line
+plot.
+
 ---
 
 ## 3. Sensitive-features ablation (Phase E.1)
@@ -395,6 +416,32 @@ Each run records the actually-dropped column list in `partition_stats.json["drop
 ---
 
 ## 4. Figures (Phase E.4)
+
+All plot scripts live in [`Analysis/CommunitiesCrime/`](../Analysis/CommunitiesCrime/)
+and read directly from the run artifacts in §5 — no separate logging
+pass needed, just point each script at the relevant `--run_dir`(s).
+
+**Activate the venv before running any plot command** (the scripts
+import matplotlib, joblib, and the project's own log parser):
+
+```bash
+source .venv/bin/activate   # Linux / macOS / WSL
+```
+
+The three primary scripts and what they consume:
+
+| Script | Reads from | Produces |
+|---|---|---|
+| `plot_per_client_distribution` | one `--run_dir` (uses its `partition_stats.json`) | bar chart of train-set class counts per client |
+| `plot_centralized_vs_federated` | one or more `--run_dir`s (uses their `server_evaluation.log`) | overlaid metric-vs-round line plot, with optional horizontal baseline |
+| `plot_scaling_n_clients` | N `--run_dir`s tagged by client count | bar of best macro-F1 + line of rounds-to-convergence vs N |
+
+All three accept:
+
+- `--output <path>` — extension (`.png`, `.pdf`, `.svg`, `.eps`)
+  picks the format.
+- `--style {default,paper}` — `paper` uses 300 DPI, no top/right
+  spines, and larger fonts; use this for camera-ready figures.
 
 ### 4.1 Per-client class distribution
 
