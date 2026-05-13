@@ -316,7 +316,7 @@ experiments. Five-client FedAvg over a geographic non-IID partition
 python App/TrainingApp/HFLHost/HFLHost.py \
     --model_type FUSION-MLP --fl_strategy FedAvg \
     --partition_strategy geographic \
-    --num_clients 5 --rounds 100 --epochs 1 --min_clients 5 \
+    --num_clients 5 --rounds 50 --epochs 1 --min_clients 5 \
     --run_dir results/exp4_fedavg_geo \
     --save_name fedavg_geo_n5
 ```
@@ -326,7 +326,7 @@ python App/TrainingApp/HFLHost/HFLHost.py \
 python App/TrainingApp/HFLHost/HFLHost.py `
     --model_type FUSION-MLP --fl_strategy FedAvg `
     --partition_strategy geographic `
-    --num_clients 5 --rounds 100 --epochs 1 --min_clients 5 `
+    --num_clients 5 --rounds 50 --epochs 1 --min_clients 5 `
     --run_dir results/exp4_fedavg_geo `
     --save_name fedavg_geo_n5
 ```
@@ -338,7 +338,7 @@ FedProx variant (drift-robust on non-IID partitions):
 python App/TrainingApp/HFLHost/HFLHost.py \
     --model_type FUSION-MLP --fl_strategy FedProx --fedprox_mu 0.01 \
     --partition_strategy geographic \
-    --num_clients 5 --rounds 100 --epochs 1 --min_clients 5 \
+    --num_clients 5 --rounds 50 --epochs 1 --min_clients 5 \
     --run_dir results/exp5_fedprox_geo \
     --save_name fedprox_geo_n5
 ```
@@ -348,7 +348,7 @@ python App/TrainingApp/HFLHost/HFLHost.py \
 python App/TrainingApp/HFLHost/HFLHost.py `
     --model_type FUSION-MLP --fl_strategy FedProx --fedprox_mu 0.01 `
     --partition_strategy geographic `
-    --num_clients 5 --rounds 100 --epochs 1 --min_clients 5 `
+    --num_clients 5 --rounds 50 --epochs 1 --min_clients 5 `
     --run_dir results/exp5_fedprox_geo `
     --save_name fedprox_geo_n5
 ```

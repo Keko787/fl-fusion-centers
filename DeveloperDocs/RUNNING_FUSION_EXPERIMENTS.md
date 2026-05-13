@@ -331,7 +331,7 @@ python App/TrainingApp/HFLHost/HFLHost.py \
     --fl_strategy FedAvg \
     --partition_strategy iid \
     --num_clients 5 \
-    --rounds 100 \
+    --rounds 50 \
     --epochs 1 \
     --min_clients 5 \
     --run_dir results/exp3_fedavg_iid \
@@ -345,7 +345,7 @@ python App/TrainingApp/HFLHost/HFLHost.py `
     --fl_strategy FedAvg `
     --partition_strategy iid `
     --num_clients 5 `
-    --rounds 100 `
+    --rounds 50 `
     --epochs 1 `
     --min_clients 5 `
     --run_dir results/exp3_fedavg_iid `
@@ -362,7 +362,7 @@ five `TrainingClient.py` processes, one per machine, varying
 python App/TrainingApp/HFLHost/HFLHost.py \
     --model_type FUSION-MLP --distributed \
     --fl_strategy FedAvg --partition_strategy iid \
-    --num_clients 5 --rounds 100 --epochs 1 --min_clients 5 \
+    --num_clients 5 --rounds 50 --epochs 1 --min_clients 5 \
     --commcrime_random_seed 42 \
     --run_dir results/exp3_fedavg_iid --save_name fedavg_iid_n5
 
@@ -381,7 +381,7 @@ python App/TrainingApp/Client/TrainingClient.py \
 python App/TrainingApp/HFLHost/HFLHost.py `
     --model_type FUSION-MLP --distributed `
     --fl_strategy FedAvg --partition_strategy iid `
-    --num_clients 5 --rounds 100 --epochs 1 --min_clients 5 `
+    --num_clients 5 --rounds 50 --epochs 1 --min_clients 5 `
     --commcrime_random_seed 42 `
     --run_dir results/exp3_fedavg_iid --save_name fedavg_iid_n5
 
@@ -410,7 +410,7 @@ python App/TrainingApp/HFLHost/HFLHost.py \
     --fl_strategy FedAvg \
     --partition_strategy geographic \
     --num_clients 5 \
-    --rounds 100 \
+    --rounds 50 \
     --epochs 1 \
     --min_clients 5 \
     --run_dir results/exp4_fedavg_geo \
@@ -424,7 +424,7 @@ python App/TrainingApp/HFLHost/HFLHost.py `
     --fl_strategy FedAvg `
     --partition_strategy geographic `
     --num_clients 5 `
-    --rounds 100 `
+    --rounds 50 `
     --epochs 1 `
     --min_clients 5 `
     --run_dir results/exp4_fedavg_geo `
@@ -439,7 +439,7 @@ python App/TrainingApp/HFLHost/HFLHost.py `
 python App/TrainingApp/HFLHost/HFLHost.py \
     --model_type FUSION-MLP --distributed \
     --fl_strategy FedAvg --partition_strategy geographic \
-    --num_clients 5 --rounds 100 --epochs 1 --min_clients 5 \
+    --num_clients 5 --rounds 50 --epochs 1 --min_clients 5 \
     --commcrime_random_seed 42 \
     --run_dir results/exp4_fedavg_geo --save_name fedavg_geo_n5
 
@@ -458,7 +458,7 @@ python App/TrainingApp/Client/TrainingClient.py \
 python App/TrainingApp/HFLHost/HFLHost.py `
     --model_type FUSION-MLP --distributed `
     --fl_strategy FedAvg --partition_strategy geographic `
-    --num_clients 5 --rounds 100 --epochs 1 --min_clients 5 `
+    --num_clients 5 --rounds 50 --epochs 1 --min_clients 5 `
     --commcrime_random_seed 42 `
     --run_dir results/exp4_fedavg_geo --save_name fedavg_geo_n5
 
@@ -488,7 +488,7 @@ python App/TrainingApp/HFLHost/HFLHost.py \
     --fl_strategy FedProx --fedprox_mu 0.01 \
     --partition_strategy geographic \
     --num_clients 5 \
-    --rounds 100 \
+    --rounds 50 \
     --epochs 1 \
     --min_clients 5 \
     --run_dir results/exp5_fedprox_geo \
@@ -502,7 +502,7 @@ python App/TrainingApp/HFLHost/HFLHost.py `
     --fl_strategy FedProx --fedprox_mu 0.01 `
     --partition_strategy geographic `
     --num_clients 5 `
-    --rounds 100 `
+    --rounds 50 `
     --epochs 1 `
     --min_clients 5 `
     --run_dir results/exp5_fedprox_geo `
@@ -518,7 +518,7 @@ python App/TrainingApp/HFLHost/HFLHost.py \
     --model_type FUSION-MLP --distributed \
     --fl_strategy FedProx --fedprox_mu 0.01 \
     --partition_strategy geographic \
-    --num_clients 5 --rounds 100 --epochs 1 --min_clients 5 \
+    --num_clients 5 --rounds 50 --epochs 1 --min_clients 5 \
     --commcrime_random_seed 42 \
     --run_dir results/exp5_fedprox_geo --save_name fedprox_geo_n5
 
@@ -538,7 +538,7 @@ python App/TrainingApp/HFLHost/HFLHost.py `
     --model_type FUSION-MLP --distributed `
     --fl_strategy FedProx --fedprox_mu 0.01 `
     --partition_strategy geographic `
-    --num_clients 5 --rounds 100 --epochs 1 --min_clients 5 `
+    --num_clients 5 --rounds 50 --epochs 1 --min_clients 5 `
     --commcrime_random_seed 42 `
     --run_dir results/exp5_fedprox_geo --save_name fedprox_geo_n5
 
@@ -573,7 +573,7 @@ for n in 3 5 10; do
       --fl_strategy FedAvg \
       --partition_strategy geographic \
       --num_clients $n \
-      --rounds 100 \
+      --rounds 50 \
       --epochs 1 \
       --min_clients $n \
       --run_dir results/exp6_scaling_n${n} \
@@ -589,7 +589,7 @@ foreach ($n in 3, 5, 10) {
         --fl_strategy FedAvg `
         --partition_strategy geographic `
         --num_clients $n `
-        --rounds 100 `
+        --rounds 50 `
         --epochs 1 `
         --min_clients $n `
         --run_dir "results/exp6_scaling_n$n" `
@@ -606,7 +606,7 @@ hardware for, then start one host process and N client processes:
 python App/TrainingApp/HFLHost/HFLHost.py \
     --model_type FUSION-MLP --distributed \
     --fl_strategy FedAvg --partition_strategy geographic \
-    --num_clients 3 --rounds 100 --epochs 1 --min_clients 3 \
+    --num_clients 3 --rounds 50 --epochs 1 --min_clients 3 \
     --commcrime_random_seed 42 \
     --run_dir results/exp6_scaling_n3 --save_name fedavg_geo_n3
 
@@ -625,7 +625,7 @@ python App/TrainingApp/Client/TrainingClient.py \
 python App/TrainingApp/HFLHost/HFLHost.py `
     --model_type FUSION-MLP --distributed `
     --fl_strategy FedAvg --partition_strategy geographic `
-    --num_clients 3 --rounds 100 --epochs 1 --min_clients 3 `
+    --num_clients 3 --rounds 50 --epochs 1 --min_clients 3 `
     --commcrime_random_seed 42 `
     --run_dir results/exp6_scaling_n3 --save_name fedavg_geo_n3
 
@@ -717,7 +717,7 @@ python App/TrainingApp/Client/TrainingClient.py \
 
 python App/TrainingApp/HFLHost/HFLHost.py \
     --model_type FUSION-MLP --fl_strategy FedAvg \
-    --partition_strategy geographic --num_clients 5 --rounds 100 \
+    --partition_strategy geographic --num_clients 5 --rounds 50 \
     --epochs 1 --min_clients 5 --no-drop_sensitive_features \
     --run_dir results/exp4_fedavg_geo_KEEP_SENSITIVE \
     --save_name fedavg_geo_keep_sensitive
@@ -735,7 +735,7 @@ python App/TrainingApp/Client/TrainingClient.py `
 
 python App/TrainingApp/HFLHost/HFLHost.py `
     --model_type FUSION-MLP --fl_strategy FedAvg `
-    --partition_strategy geographic --num_clients 5 --rounds 100 `
+    --partition_strategy geographic --num_clients 5 --rounds 50 `
     --epochs 1 --min_clients 5 --no-drop_sensitive_features `
     --run_dir results/exp4_fedavg_geo_KEEP_SENSITIVE `
     --save_name fedavg_geo_keep_sensitive
