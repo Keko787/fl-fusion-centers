@@ -94,7 +94,7 @@ Regional fusion centers, joint terrorism task forces, and similar cross-agency a
 
 Three coupled challenges distinguish the fusion-center setting from canonical FL benchmarks. First, the natural data partition is \textit{geographic and statutorily fixed}: each fusion center owns the rows from its constituent communities, the partition cannot be re-shuffled to improve IID structure, and the resulting per-client class distributions diverge sharply between coastal-urban regions and inland-rural ones. Second, the prediction target is \textit{multi-task}: operational consumers need both a discrete threat-category prediction (low / medium / high severity) and a continuous escalation score that flags communities trending toward higher severity, and these two heads benefit from a shared feature backbone trained jointly~\cite{caruana1997multitask, ruder2017overview}. Third, the input features include \textit{statutorily sensitive demographic columns} (race composition, age distribution, household type) that DOJ Civil Rights Division guidance explicitly discourages using in predictive analytics for law-enforcement decisions; a deployable framework must therefore expose first-class control over whether those columns enter the model.
 
-\begin{figure}[t]
+\begin{figure}[!htbp]
 \centering
 \includegraphics[width=\linewidth]{Figures/overview_atlas.png}
 \caption{ATLAS: Cross-jurisdictional federated threat-intelligence training across regional fusion centers without raw-data sharing.}
@@ -163,7 +163,7 @@ Cross-jurisdictional analytic systems have historically been built as centralize
 Across the four threads above, no single system unifies drift-robust aggregation, geographic non-IID tabular workloads, multi-task threat-and-escalation prediction, sensitive-feature suppression, and a real-deployment multi-node mode. Table~\ref{tab:framework-comparison-atlas} highlights this combined gap; ATLAS fills it through a decoupled three-layer design specifically tailored for cross-jurisdictional fusion-center analytics.
 
 % ==================================================================
-\begin{figure*}[h]
+\begin{figure*}[!t]
     \centering
     \includegraphics[width=0.95\textwidth]{Figures/atlas_architecture.png}
     \caption{ATLAS: Three-Layer Coordination Framework for Cross-Jurisdictional Federated Threat-Intelligence Estimation.}
@@ -222,7 +222,7 @@ Building upon the partitioning of Layer 1 and the multi-task model of Layer 2, L
 
 As illustrated in the bottom portion of Fig.~\ref{fig:architecture}, ATLAS follows a host-client decomposition where the host process runs the Flower server and aggregation strategy, while client processes run the local FUSION-MLP training loop. At the host, \texttt{FusionFedAvg} (a subclass of Flower's \texttt{FedAvg}) maintains the global model state, performs weighted aggregation over received client updates, and writes per-round metrics to the server evaluation log. At each client, \texttt{FusionMLPClient} loads its assigned partition, fits its local scaler (per-client or global as configured at Layer 1), executes local SGD against the joint loss from Equation~\ref{eq:joint_loss}, and ships the updated weights back to the host. Under FedProx, the same client wrapper substitutes \texttt{FedProxFusionMLPModel} for the base model class, activating the proximal regularization in Equation~\ref{eq:prox_loss}.
 
-\begin{algorithm}[t]
+\begin{algorithm}[!htbp]
 \caption{ATLAS Federated Training Round}
 \label{alg:atlas_round}
 \begin{algorithmic}[1]
@@ -274,21 +274,22 @@ All experiments use the UCI Communities and Crime (Unnormalized) dataset, which 
 
 The six-experiment matrix summarized in Table~\ref{tab:experiment_matrix} systematically explores the learning-architecture and federation-strategy axes. Experiment 1 (Centralized) uses a single client seeing the union of all training partitions and sets the macro-F1 ceiling; Experiment 2 (Local-only) trains one model per client on its own partition only and establishes the per-jurisdiction siloed baseline; Experiment 3 (FedAvg / IID) uses FedAvg with uniform IID partitioning and acts as the federation sanity check; Experiment 4 (FedAvg / Geographic) uses FedAvg with non-IID geographic partitioning and is the core fusion-center scenario; Experiment 5 (FedProx / Geographic) replaces FedAvg with FedProx ($\mu = 0.01$) on the same geographic partition and tests drift robustness; Experiment 6 (Scaling) sweeps the framework across $N \in \{3, 5, 10\}$ at fixed FedAvg / geographic configuration. The centralized and local-only experiments use 250 training epochs; the federated experiments use 50 rounds of 5 local epochs each.
 
-\begin{table}[h]
+\begin{table}[!htbp]
 \centering
 \caption{Six-experiment matrix evaluating learning architecture (Exp~1--3), non-IID robustness (Exp~4--5), and scaling (Exp~6). All cells use \texttt{--commcrime\_random\_seed 42}.}
 \label{tab:experiment_matrix}
 \small
-\begin{tabularx}{\columnwidth}{l l l X}
+\setlength{\tabcolsep}{4pt}
+\begin{tabularx}{\columnwidth}{c l l X}
 \toprule
 \textbf{Exp} & \textbf{Mode} & \textbf{Strategy} & \textbf{Description} \\
 \midrule
-1 & Central & --- & Single process, union of all training partitions. Sets macro-F1 ceiling. \\
-2 & Local-only & --- & One client per jurisdiction, isolated training, no FL. Siloed baseline. \\
-3 & Federated & FedAvg / IID & Sanity check: federation on uniform IID partition. \\
-4 & Federated & FedAvg / Geographic & Core scenario: federation on FIPS-derived geographic partition. \\
-5 & Federated & FedProx / Geographic & Drift-robust aggregation on geographic partition; $\mu = 0.01$. \\
-6 & Federated & FedAvg / Geographic, $N \in \{3,5,10\}$ & Scaling sweep at fixed strategy. \\
+1 & Central     & ---                  & Single process, union of all training partitions. Sets macro-F1 ceiling. \\
+2 & Local-only  & ---                  & One client per jurisdiction, isolated training, no FL. Siloed baseline. \\
+3 & Federated   & FedAvg / IID         & Sanity check: federation on uniform IID partition. \\
+4 & Federated   & FedAvg / Geographic  & Core scenario: federation on FIPS-derived geographic partition. \\
+5 & Federated   & FedProx / Geographic & Drift-robust aggregation on geographic partition; $\mu = 0.01$. \\
+6 & Federated   & FedAvg / Geographic  & Scaling sweep at $N \in \{3,5,10\}$ over the same strategy. \\
 \bottomrule
 \end{tabularx}
 \end{table}
@@ -303,12 +304,13 @@ The evaluation uses two metric groups that align with the two experiment groups.
 
 For the learning-architecture evaluation, the primary metrics are the threat-classification macro-F1 score and the escalation-score regression quality. Threat macro-F1 is the unweighted mean per-class F1 across the three severity buckets; the unweighted form is preferred over the weighted form because the dataset is mildly class-imbalanced and the unweighted macro-F1 penalizes silent collapse of the minority classes. Escalation-regression quality is reported via mean absolute error (MAE), area under the ROC curve (AUROC) for the implied binary escalation-positive task, and Spearman rank correlation against the true escalation score. Table~\ref{tab:atlas_metrics} summarizes the definitions.
 
-\begin{table}[h]
+\begin{table}[!htbp]
 \centering
 \caption{Dependent variables for the ATLAS evaluation. Tier~1 metrics carry the primary learning-quality hypotheses, while Tier~2 metrics support federation-behavior and fairness analyses.}
 \label{tab:atlas_metrics}
 \small
-\begin{tabularx}{\columnwidth}{l l L l}
+\setlength{\tabcolsep}{4pt}
+\begin{tabularx}{\columnwidth}{l l L c}
 \toprule
 \textbf{Metric} & \textbf{Symbol} & \textbf{Definition} & \textbf{Tier} \\
 \midrule
@@ -334,7 +336,7 @@ The bias-mitigation ablation uses the same primary metrics but compares paired r
 \paragraph{Group A --- Learning architecture.}
 Table~\ref{tab:learning_arch_results} summarizes the learning-architecture results across the centralized, local-only, and federated configurations at $N=5$. \textit{Federated coordination recovers the majority of the centralized macro-F1 ceiling while preserving raw-data sovereignty across jurisdictions, and the local-only baseline loses substantial accuracy that the federation recovers} (\textbf{Observation 1}). The centralized baseline sets the upper bound at $\mathrm{F1}_{\text{macro}} \approx 0.62$ on the global test set; the local-only configuration averages $\approx 0.47$ across the five per-jurisdiction models because each jurisdiction sees only $\sim$20\% of the training rows; and FedAvg / IID closes most of this gap to $\approx 0.60$, demonstrating that federation recovers the cross-jurisdictional signal without requiring raw-data sharing.
 
-\begin{table}[t]
+\begin{table}[!htbp]
 \centering
 \caption{Learning-architecture comparison at $N=5$ fusion centers, seed = 42. Mean across the global test set. \textit{(Numbers are illustrative pending full experimental run; substitute actual values from} \texttt{<run\_dir>/<timestamp>\_evaluation.log}\textit{.)}}
 \label{tab:learning_arch_results}
@@ -355,7 +357,7 @@ FedProx / Geographic & $0.58$ & $0.68$ & $0.20$ & $0.81$ & $0.66$ \\
 
 Figure~\ref{fig:headline_convergence} (placeholder) illustrates the per-round macro-F1 trajectory of FedAvg / IID, FedAvg / Geographic, and FedProx / Geographic against the centralized horizontal reference line. Under IID partitioning, FedAvg converges smoothly within $\approx 20$ rounds and stabilizes near the centralized ceiling. Under geographic partitioning, FedAvg exhibits visible oscillation in early rounds before settling at a lower plateau ($\approx 0.55$), consistent with the client-drift behavior FedProx is designed to mitigate. FedProx with $\mu = 0.01$ produces a smoother trajectory and a higher final plateau ($\approx 0.58$), confirming that the proximal regularization meaningfully closes the IID-vs-geographic gap.
 
-\begin{figure}[t]
+\begin{figure}[!htbp]
 \centering
 \includegraphics[width=\linewidth]{Figures/headline_convergence.png}
 \caption{Headline convergence figure: per-round macro-F1 for FedAvg / IID, FedAvg / Geographic, and FedProx / Geographic at $N=5$, with the centralized baseline as the horizontal reference line.}
@@ -365,7 +367,7 @@ Figure~\ref{fig:headline_convergence} (placeholder) illustrates the per-round ma
 \paragraph{Group B --- Federation strategy and partition skew.}
 Table~\ref{tab:federation_strategy} summarizes the federation-strategy results under non-IID geographic partitioning. \textit{FedProx with a small proximal regularizer measurably narrows the IID-vs-geographic accuracy gap and reduces per-client fairness variance compared with FedAvg} (\textbf{Observation 2}). Under FedAvg / Geographic, the per-client fairness variance $\sigma^{2}_{\text{F1}}$ is approximately $4\times$ larger than under FedAvg / IID, indicating that the geographic skew causes the global model to converge toward the dominant coastal-urban clients' distributions at the expense of inland-rural minority jurisdictions. FedProx / Geographic reduces this variance by $\approx 35\%$ while simultaneously improving the global macro-F1, demonstrating that the proximal term improves both accuracy and fairness simultaneously.
 
-\begin{table}[t]
+\begin{table}[!htbp]
 \centering
 \caption{Federation-strategy results under non-IID geographic partitioning at $N=5$. Mean $\pm$ std over the last 10 rounds. \textit{(Illustrative numbers.)}}
 \label{tab:federation_strategy}
@@ -384,7 +386,7 @@ FedProx / Geographic & $0.58 \pm 0.01$ & $0.0055$ & $28$ & $0.13 \to 0.04$ \\
 
 Figure~\ref{fig:proximal_evolution} (placeholder) tracks the proximal-contribution metric $\Pi$ across rounds for the FedProx / Geographic configuration. The $\Pi$ trajectory decays from $0.13$ at round 1 toward $0.04$ by round 50, indicating that the proximal regularization is actively bounding client drift in early rounds and gradually relaxes as the global model converges. This decay pattern confirms that the proximal term is operationally meaningful during training rather than a vestigial penalty, supporting the choice of $\mu = 0.01$ as the working coefficient.
 
-\begin{figure}[t]
+\begin{figure}[!htbp]
 \centering
 \includegraphics[width=\linewidth]{Figures/proximal_evolution.png}
 \caption{Proximal-contribution evolution under FedProx / Geographic at $N=5$. The $(\mu/2)\sum_{j} \|\theta_{j} - \theta^{t}\|^{2}$ trajectory decays toward zero as the global model converges, confirming that the proximal regularization is operationally active.}
@@ -393,7 +395,7 @@ Figure~\ref{fig:proximal_evolution} (placeholder) tracks the proximal-contributi
 
 Figure~\ref{fig:per_client_distribution} illustrates the per-client class distribution under geographic partitioning at $N=5$. The bar chart shows clear divergence between fusion-center buckets, with coastal-urban regions dominated by low-severity threats and inland-rural regions showing inverted distributions. This figure visually motivates the FedProx-vs-FedAvg comparison: the partition is meaningfully non-IID and the federation must contend with it, not just with stochastic per-client noise.
 
-\begin{figure}[t]
+\begin{figure}[!htbp]
 \centering
 \includegraphics[width=\linewidth]{Figures/per_client_distribution_geo_n5.png}
 \caption{Per-client class distribution under geographic partitioning at $N=5$. Each bar shows the training-set class counts for one fusion-center bucket, exposing the non-IID character that drives the FedAvg-vs-FedProx comparison.}
@@ -403,7 +405,7 @@ Figure~\ref{fig:per_client_distribution} illustrates the per-client class distri
 \paragraph{Scaling and deployment validation.}
 Table~\ref{tab:scaling_results} summarizes the scaling-sweep results across $N \in \{3, 5, 10\}$. \textit{The framework scales cleanly from $N=3$ to $N=10$ fusion centers with at most a modest macro-F1 degradation, and the wire-bandwidth overhead remains a small fraction of typical deployment budgets} (\textbf{Observation 3}). The scaling figure shows the best smoothed macro-F1 plateauing near the FedAvg / Geographic ceiling at $N=5$ and degrading slightly at $N=10$ as each per-client partition shrinks below the threshold where local SGD remains statistically stable. The rounds-to-plateau metric increases gradually with $N$, consistent with the expectation that more clients require more rounds to reach consensus under non-IID partitioning.
 
-\begin{table}[t]
+\begin{table}[!htbp]
 \centering
 \caption{Scaling sweep across $N \in \{3, 5, 10\}$ fusion centers, FedAvg / Geographic. \textit{(Illustrative numbers.)}}
 \label{tab:scaling_results}
@@ -425,7 +427,7 @@ The multi-node deployment validation at $N=3$ on Chameleon Cloud (host \texttt{1
 \paragraph{Sensitive-features bias-mitigation ablation.}
 Table~\ref{tab:bias_ablation} summarizes the paired runs of Experiments~1, 4, and 5 with and without the \texttt{--drop\_sensitive\_features} flag. \textit{Suppressing the 12 statutorily sensitive demographic columns removes a measurable bias channel without degrading top-line threat-classification quality} (\textbf{Observation 5}). The threat macro-F1 changes by less than $0.01$ across all three experiments when the sensitive columns are dropped, while the variance of per-protected-group F1 (held-out condition: protected demographic subgroup) decreases noticeably. This pattern is consistent with the DOJ Civil Rights Division guidance assumption that the sensitive columns contribute primarily to demographic-correlated decision channels rather than to the underlying threat signal, and supports the Layer~1 design choice of exposing sensitive-feature suppression as a first-class flag.
 
-\begin{table}[t]
+\begin{table}[!htbp]
 \centering
 \caption{Sensitive-features ablation: paired runs with and without \texttt{--drop\_sensitive\_features}. Top-line threat macro-F1 is preserved while per-protected-group fairness variance decreases. \textit{(Illustrative numbers.)}}
 \label{tab:bias_ablation}
