@@ -525,6 +525,7 @@ python App/TrainingApp/HFLHost/HFLHost.py \
 # Each client (vary --client_id 0..4 across 5 machines):
 python App/TrainingApp/Client/TrainingClient.py \
     --model_type FUSION-MLP --trainingArea Federated \
+    --fl_strategy FedProx --fedprox_mu 0.01 \
     --custom-host <HOST_IP> \
     --partition_strategy geographic --num_clients 5 --client_id 0 \
     --commcrime_random_seed 42 --epochs 1 \
@@ -545,16 +546,21 @@ python App/TrainingApp/HFLHost/HFLHost.py `
 # Each client (vary --client_id 0..4 across 5 machines):
 python App/TrainingApp/Client/TrainingClient.py `
     --model_type FUSION-MLP --trainingArea Federated `
+    --fl_strategy FedProx --fedprox_mu 0.01 `
     --custom-host <HOST_IP> `
     --partition_strategy geographic --num_clients 5 --client_id 0 `
     --commcrime_random_seed 42 --epochs 1 `
     --run_dir results/exp5_fedprox_geo --save_name fedprox_geo_n5_c0
 ```
 
-The client command is identical to experiment 4 — FedProx's proximal
-term `μ` lives only in the strategy on the host side and is broadcast
-to clients in the per-round fit config; nothing in the client CLI
-changes between FedAvg and FedProx runs.
+> **Pass `--fl_strategy FedProx --fedprox_mu 0.01` on every client too.**
+> Without it the client builds a plain `build_fusion_mlp` model that
+> has no `set_global_weights` method — the host's per-round μ
+> broadcast silently has no effect, the proximal-term `train_step`
+> path is never engaged, and `proximal_contribution` stays at 0.0 for
+> every round. The simulation runner sets the FedProx variant
+> automatically when `--fl_strategy=FedProx`; distributed clients have
+> to be told explicitly.
 
 Robustness-to-drift claim — Phase D DoD: macro-F1 ≥ FedAvg on the same partition.
 

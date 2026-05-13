@@ -113,7 +113,9 @@ def main():
                                                           args.pretrained_discriminator, args.dataset,
                                                           input_dim, noise_dim, args.regularizationEnabled,
                                                           args.DP_enabled, l2_alpha, latent_dim, num_classes,
-                                                          seed=getattr(args, "commcrime_random_seed", None))
+                                                          seed=getattr(args, "commcrime_random_seed", None),
+                                                          fl_strategy=getattr(args, "fl_strategy", "FedAvg"),
+                                                          fedprox_mu=getattr(args, "fedprox_mu", 0.0))
 
     print("✅ Models Initialized Successfully!")
     print()

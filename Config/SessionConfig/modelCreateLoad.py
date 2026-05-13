@@ -35,12 +35,12 @@ from Config.modelStructures.NIDS.NIDS_Struct import create_CICIOT_Model, create_
 from Config.modelStructures.GAN.discriminatorStruct import create_discriminator_binary, create_discriminator_binary_optimized, create_discriminator_binary, build_AC_discriminator, create_discriminator
 from Config.modelStructures.GAN.generatorStruct import create_generator, create_generator_optimized, build_AC_generator
 from Config.modelStructures.GAN.ganStruct import create_model, load_GAN_model, create_model_binary, create_model_binary_optimized, create_model_W_binary, load_and_merge_ACmodels, create_model_AC, merge_AC_model_instances
-from Config.modelStructures.FusionMLP.multiTaskMLPStruct import build_fusion_mlp, load_fusion_mlp
+from Config.modelStructures.FusionMLP.multiTaskMLPStruct import build_fusion_mlp, build_fedprox_fusion_mlp, load_fusion_mlp
 
 
 def modelCreateLoad(modelType, train_type, pretrainedNids, pretrainedGan, pretrainedGenerator, pretrainedDiscriminator,
                     dataset_used, input_dim, noise_dim, regularizationEnabled, DP_enabled, l2_alpha,
-                    latent_dim, num_classes, seed=None):
+                    latent_dim, num_classes, seed=None, fl_strategy="FedAvg", fedprox_mu=0.0):
     nids = None
     discriminator = None
     generator = None
@@ -339,6 +339,19 @@ def modelCreateLoad(modelType, train_type, pretrainedNids, pretrainedGan, pretra
         if pretrainedNids:
             print(f"Loading pretrained FUSION-MLP from {pretrainedNids}")
             nids = load_fusion_mlp(pretrainedNids)
+        elif fl_strategy == "FedProx":
+            # FedProx clients need the FedProxFusionMLPModel subclass —
+            # plain build_fusion_mlp has no set_global_weights method, so
+            # the host's per-round mu broadcast falls on deaf ears and
+            # proximal_contribution stays zero. Pass --fl_strategy
+            # FedProx on the client to engage the proximal-term path.
+            print(f"Creating FedProx FUSION-MLP (mu={fedprox_mu}).")
+            nids = build_fedprox_fusion_mlp(
+                input_dim=input_dim,
+                num_classes=num_classes,
+                l2_alpha=l2_alpha if regularizationEnabled else 0.0,
+                mu=fedprox_mu,
+            )
         else:
             print("No pretrained FUSION-MLP provided. Creating a new model.")
             nids = build_fusion_mlp(input_dim=input_dim,

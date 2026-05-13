@@ -79,6 +79,11 @@ def parse_training_client_args():
     parser.add_argument('--trainingArea', type=str, choices=["Central", "Federated"], default="Central",
                         help='Please select Central, Federated as the place to train the model')
 
+    parser.add_argument("--fl_strategy", type=str, choices=["FedAvg", "FedProx"], default="FedAvg",
+                        help="FUSION-MLP only: which model variant this client builds. Must match the host's --fl_strategy. FedProx engages the FedProxFusionMLPModel subclass so the host's per-round mu broadcast actually applies; otherwise the client silently degrades to FedAvg.")
+    parser.add_argument("--fedprox_mu", type=float, default=0.01,
+                        help="FUSION-MLP / FedProx only: local proximal-term coefficient seed. The host re-broadcasts mu in the per-round config; this client-side value is what the model starts with before the first round.")
+
     parser.add_argument("--host", type=str, default="1",
                         help="Fixed Server node number 1-4")
 
