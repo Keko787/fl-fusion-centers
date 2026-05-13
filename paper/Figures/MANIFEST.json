@@ -1,0 +1,5 @@
+{
+  "per_client_distribution_geo_n5.png": "real from results\\exp4_fedavg_geo_n5",
+  "headline_convergence.png": "real from FedAvg-IID=results\\exp3_fedavg_iid_n5; FedAvg-Geographic=results\\exp4_fedavg_geo_n5; FedProx-Geographic=results\\exp5_fedprox_geo_n5",
+  "proximal_evolution.png": "real from results\\exp5_fedprox_geo_n5"
+}
