@@ -358,14 +358,14 @@ def parse_HFL_Host_args():
     # ─── Training Session Parameters ───
     parser.add_argument("--epochs", type=int, default=5, help="Number of training epochs per round")
 
-    parser.add_argument("--rounds", type=int, choices=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10], default=1,
-                        help="Number of federated learning rounds (1-10)")
+    parser.add_argument("--rounds", type=int, default=1,
+                        help="Number of federated learning rounds. Default 1; runbook §2 experiments use 50-100.")
 
     parser.add_argument("--synth_portion", type=float, choices=[0, 0.05, 0.1, 0.15, 0.2, 0.3, 0.4, 0.5, 0.6], default=0,
                         help="Synthetic data augmentation ratio (0-0.6)")
 
-    parser.add_argument("--min_clients", type=int, choices=[1, 2, 3, 4, 5, 6], default=2,
-                        help="Minimum number of clients required for federated training")
+    parser.add_argument("--min_clients", type=int, default=2,
+                        help="Minimum number of clients required for federated training. Default 2; with FUSION-MLP set this equal to --num_clients (the strategy waits for this many clients before round 1 fires).")
 
     # ─── Fusion Centers / Communities-Crime Settings (mirrors client parser) ───
     parser.add_argument("--commcrime_path", type=str, default=None,
