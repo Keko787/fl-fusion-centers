@@ -78,6 +78,12 @@
 
 \maketitle
 
+% IEEE two-column layout has narrow columns; \sloppy lets LaTeX stretch
+% inter-word spaces rather than overflowing the margin when a long
+% \texttt{...} identifier (e.g. fairness_macro_f1_variance) lands at a
+% line break. Slightly wider gaps in some lines, but no margin overruns.
+\sloppy
+
 \begin{abstract}
 Regional fusion centers and similar inter-jurisdictional analytic units are responsible for fusing crime, infrastructure, and threat data from agencies that cannot share raw records due to statutory privacy constraints, agency policy, and population-level fairness obligations. Centralized analytics violate these constraints; isolated per-jurisdiction models lose the cross-regional signal that motivates the fusion-center mission in the first place. To address this tension, we present \textbf{ATLAS} (\textit{Adaptive Threat-intelligence Learning Across Sovereign jurisdictions}), a layered federated-learning framework that performs multi-task threat-class and escalation prediction across geographically partitioned fusion centers without raw-data sharing. ATLAS integrates three coordinated layers: (i) a privacy-preserving data-partitioning layer that enforces geographic non-IID splits and selectively removes statutorily sensitive features before any training begins; (ii) a multi-task FUSION-MLP layer with a shared trunk and two task heads (threat-class classification and escalation-score regression) optimized under a weighted joint loss; and (iii) a federated coordination layer supporting both single-process simulation (Ray-actor clients in one process) and real multi-node distributed gRPC operation, with FedAvg and FedProx aggregation strategies. We evaluate ATLAS through two complementary experiment groups: a learning-architecture group comparing centralized, local-only, and federated learning on the UCI Communities and Crime (Unnormalized) dataset, and a robustness group comparing FedAvg against drift-robust FedProx under non-IID geographic partitioning at $N\in\{3,5,10\}$ fusion-center scales. Experimental results show that federated coordination recovers most of the centralized macro-F1 ceiling while preserving raw-data sovereignty across jurisdictions, FedProx with a small proximal regularizer measurably narrows the IID-vs-geographic accuracy gap, and dropping sensitive features removes a measurable bias channel without degrading top-line threat-classification quality. Together, the three layers establish ATLAS as a practical foundation for cross-jurisdictional threat-intelligence analytics under statutory privacy and fairness constraints.
 \end{abstract}
@@ -294,7 +300,7 @@ The six-experiment matrix summarized in Table~\ref{tab:experiment_matrix} system
 \end{tabularx}
 \end{table}
 
-A sensitive-features ablation is performed independently of the primary matrix by re-running Experiments~1, 4, and 5 with \texttt{--no-drop\_sensitive\_features}, exposing the bias-mitigation effect of the Layer~1 suppression. Each run records the actually-dropped column list in \texttt{partition\_stats.json[``dropped\_sensitive\_columns''\hspace{0pt}]} so the ablation table can cite the exact column set per run.
+A sensitive-features ablation is performed independently of the primary matrix by re-running Experiments~1, 4, and 5 with \texttt{--no-drop\_sensitive\_features}, exposing the bias-mitigation effect of the Layer~1 suppression. Each run records the actually-dropped column list in the \texttt{dropped\_sensitive\_columns} field of \texttt{partition\_stats.json}, so the ablation table can cite the exact column set per run.
 
 For the multi-node deployment validation, Experiments~3, 4, 5, and the $N=3$ scaling cell are re-run on a three-machine Chameleon Cloud reservation with one host process at IP \texttt{129.114.108.50} binding the Flower gRPC server on port 8080, and three client processes (\texttt{--client\_id} 0, 1, 2) each running on a separate machine. The \texttt{--global\_scaler} flag is set on every client so the multi-node and simulation results are bit-comparable at the same random seed. This deployment-validation step exercises the full network stack and confirms that the framework operates correctly outside the single-node simulator.
 
@@ -342,6 +348,7 @@ Table~\ref{tab:learning_arch_results} summarizes the learning-architecture resul
 \label{tab:learning_arch_results}
 \small
 \setlength{\tabcolsep}{4pt}
+\resizebox{\columnwidth}{!}{%
 \begin{tabular}{lccccc}
 \toprule
 \textbf{Configuration} & $\mathrm{F1}_{\text{macro}}$ & $\mathrm{Acc}$ & $\mathrm{MAE}_{\text{esc}}$ & $\mathrm{AUROC}_{\text{esc}}$ & $\rho_{\text{esc}}$ \\
@@ -352,7 +359,8 @@ FedAvg / IID         & $0.60$ & $0.70$ & $0.19$ & $0.82$ & $0.69$ \\
 FedAvg / Geographic  & $0.55$ & $0.66$ & $0.21$ & $0.79$ & $0.64$ \\
 FedProx / Geographic & $0.58$ & $0.68$ & $0.20$ & $0.81$ & $0.66$ \\
 \bottomrule
-\end{tabular}
+\end{tabular}%
+}
 \end{table}
 
 Figure~\ref{fig:headline_convergence} (placeholder) illustrates the per-round macro-F1 trajectory of FedAvg / IID, FedAvg / Geographic, and FedProx / Geographic against the centralized horizontal reference line. Under IID partitioning, FedAvg converges smoothly within $\approx 20$ rounds and stabilizes near the centralized ceiling. Under geographic partitioning, FedAvg exhibits visible oscillation in early rounds before settling at a lower plateau ($\approx 0.55$), consistent with the client-drift behavior FedProx is designed to mitigate. FedProx with $\mu = 0.01$ produces a smoother trajectory and a higher final plateau ($\approx 0.58$), confirming that the proximal regularization meaningfully closes the IID-vs-geographic gap.
@@ -373,6 +381,7 @@ Table~\ref{tab:federation_strategy} summarizes the federation-strategy results u
 \label{tab:federation_strategy}
 \small
 \setlength{\tabcolsep}{4pt}
+\resizebox{\columnwidth}{!}{%
 \begin{tabular}{lcccc}
 \toprule
 \textbf{Configuration} & $\mathrm{F1}_{\text{macro}}$ & $\sigma^{2}_{\text{F1}}$ & $R_{\text{plateau}}$ & $\Pi$ \\
@@ -381,7 +390,8 @@ FedAvg / IID         & $0.60 \pm 0.01$ & $0.0021$ & $22$ & N/A   \\
 FedAvg / Geographic  & $0.55 \pm 0.02$ & $0.0085$ & $34$ & N/A   \\
 FedProx / Geographic & $0.58 \pm 0.01$ & $0.0055$ & $28$ & $0.13 \to 0.04$ \\
 \bottomrule
-\end{tabular}
+\end{tabular}%
+}
 \end{table}
 
 Figure~\ref{fig:proximal_evolution} (placeholder) tracks the proximal-contribution metric $\Pi$ across rounds for the FedProx / Geographic configuration. The $\Pi$ trajectory decays from $0.13$ at round 1 toward $0.04$ by round 50, indicating that the proximal regularization is actively bounding client drift in early rounds and gradually relaxes as the global model converges. This decay pattern confirms that the proximal term is operationally meaningful during training rather than a vestigial penalty, supporting the choice of $\mu = 0.01$ as the working coefficient.
@@ -411,6 +421,7 @@ Table~\ref{tab:scaling_results} summarizes the scaling-sweep results across $N \
 \label{tab:scaling_results}
 \small
 \setlength{\tabcolsep}{4pt}
+\resizebox{\columnwidth}{!}{%
 \begin{tabular}{cccccc}
 \toprule
 $N$ & $\mathrm{F1}_{\text{macro}}$ & $\sigma^{2}_{\text{F1}}$ & $R_{\text{plateau}}$ & $B_{\text{r}}$ (KB) & $|\mathcal{D}_{j}|$ \\
@@ -419,7 +430,8 @@ $3$  & $0.57$ & $0.0061$ & $26$ & $148$ & $\sim 625$ \\
 $5$  & $0.55$ & $0.0085$ & $34$ & $245$ & $\sim 375$ \\
 $10$ & $0.51$ & $0.0112$ & $41$ & $490$ & $\sim 187$ \\
 \bottomrule
-\end{tabular}
+\end{tabular}%
+}
 \end{table}
 
 The multi-node deployment validation at $N=3$ on Chameleon Cloud (host \texttt{129.114.108.50}, three client machines) reproduces the simulation's macro-F1 to within $\pm 0.005$ when the \texttt{--global\_scaler} flag is set on every client. \textit{This confirms that ATLAS operates correctly across real network conditions and that the simulation-vs-deployment fidelity gap is bounded under the documented configuration} (\textbf{Observation 4}). Without \texttt{--global\_scaler}, the per-client scaler default produces a macro-F1 offset of $\approx 0.01$--$0.02$ relative to the simulation, attributable to the 10--16-standard-deviation scaler disagreement documented in Section~\ref{sec:method:partition}. Deployers seeking strict privacy preservation accept this gap as the cost of the per-client scaler default; deployers seeking bit-comparable validation use the global-scaler flag.
@@ -433,6 +445,7 @@ Table~\ref{tab:bias_ablation} summarizes the paired runs of Experiments~1, 4, an
 \label{tab:bias_ablation}
 \small
 \setlength{\tabcolsep}{4pt}
+\resizebox{\columnwidth}{!}{%
 \begin{tabular}{lcccc}
 \toprule
 \textbf{Configuration} & $\mathrm{F1}_{\text{macro}}$ (drop) & $\mathrm{F1}_{\text{macro}}$ (keep) & $\Delta$ & $\Delta\sigma^{2}_{\text{group}}$ \\
@@ -441,7 +454,8 @@ Centralized          & $0.62$ & $0.62$ & $+0.00$ & $-0.0021$ \\
 FedAvg / Geographic  & $0.55$ & $0.56$ & $-0.01$ & $-0.0034$ \\
 FedProx / Geographic & $0.58$ & $0.58$ & $+0.00$ & $-0.0029$ \\
 \bottomrule
-\end{tabular}
+\end{tabular}%
+}
 \end{table}
 
 Overall, the results show a consistent story across both experiment groups. Group~A confirms that federated coordination recovers most of the centralized accuracy ceiling while preserving raw-data sovereignty, and that local-only training loses substantial accuracy that the federation recovers. Group~B confirms that FedProx with a small proximal regularizer measurably narrows the IID-vs-geographic gap, that the framework scales cleanly from $N=3$ to $N=10$, and that the multi-node deployment reproduces the simulation's accuracy within a small documented gap. The sensitive-features ablation confirms that the Layer~1 suppression mechanism removes a measurable bias channel without degrading the operational threat-classification objective. These findings demonstrate that ATLAS supports robust, fair, and privacy-preserving multi-task threat-intelligence estimation across regional fusion centers under realistic statutory and operational constraints.
