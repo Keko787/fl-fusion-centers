@@ -902,6 +902,37 @@ The full list of metrics in each row of `server_evaluation.log`:
 `plateau_detected`, `rounds_since_improvement`. Use any of them as
 `--metric`.
 
+### 4.5 One-shot figure regeneration (N=3 experiment set)
+
+After every experiment in §2 has finished writing its `--run_dir`,
+regenerate all five figures for the N=3 set with the convenience
+wrapper at the project root:
+
+```bash
+# from the project root, with the venv active
+bash make_figures_n3.sh
+```
+
+It reads the centralized macro-F1 out of `results/exp1_centralized/`'s
+evaluation log automatically, then renders:
+
+* `results/figures/per_client_distribution_geo_n3.png` (§4.1)
+* `results/figures/headline_n3.png` (§4.2)
+* `results/figures/scaling_n_clients.png` (§4.3, only if all three
+  `exp6_scaling_n{3,5,10}/` runs exist — otherwise that step is
+  skipped with a warning)
+* `results/figures/proximal_evolution_n3.png` (§4.4)
+* `results/figures/fairness_n3.png` (§4.4)
+
+The script is just a wrapper around the individual `python -m
+Analysis.CommunitiesCrime.plot_*` commands documented above — read it
+if you want to tweak paths or output formats. It is **not** triggered
+automatically by any experiment; run it manually when you're ready to
+regenerate plots. Re-running it is idempotent.
+
+Windows users: run the script under WSL2, or adapt the commands
+manually using the §4.1–4.4 PowerShell variants above.
+
 ---
 
 ## 5. Reading the run artifacts

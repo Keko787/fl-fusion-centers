@@ -547,6 +547,22 @@ via `--metric` (e.g. `proximal_contribution`, `parameter_update_wire_bytes`,
 [`RUNNING_FUSION_EXPERIMENTS.md` §4](DeveloperDocs/RUNNING_FUSION_EXPERIMENTS.md#4-figures-phase-e4)
 for the full metric list and ablation/overhead figure recipes.
 
+**Convenience wrapper for the N=3 experiment set:** once every
+experiment in the [runbook's six-experiment matrix](DeveloperDocs/RUNNING_FUSION_EXPERIMENTS.md#2-the-six-experiment-matrix)
+has finished writing to `results/exp{1..6}_..._n3/`, regenerate every
+figure for that N=3 set in one shot:
+
+```bash
+# from the project root, with the venv active
+bash make_figures_n3.sh
+```
+
+The script reads the centralized macro-F1 from `results/exp1_centralized/`
+and writes `per_client_distribution_geo_n3.png`, `headline_n3.png`,
+`scaling_n_clients.png` (if N=5 and N=10 sim runs also exist),
+`proximal_evolution_n3.png`, and `fairness_n3.png` into
+`results/figures/`. Re-run any time experiments are extended or added.
+
 ### NIDS — Federated Training (Host)
 
 ```bash
