@@ -58,13 +58,8 @@ BLOCK_EDGE   = "#444444"
 def make_overview(out: Path) -> None:
     fig, ax = plt.subplots(figsize=(10, 5), dpi=300)
 
-    # Compact title flush to the top
-    ax.text(0.50, 0.965,
-            "ATLAS: Cross-jurisdictional federated threat-intelligence training",
-            ha="center", va="center", fontsize=12, fontweight="bold")
-
     # FL host node
-    central_host = (0.50, 0.82)
+    central_host = (0.50, 0.88)
     host_w, host_h = 0.22, 0.11
     host_box = FancyBboxPatch(
         (central_host[0] - host_w/2, central_host[1] - host_h/2),
@@ -79,7 +74,7 @@ def make_overview(out: Path) -> None:
 
     # Subtitle, placed between the host and the client row, with a soft
     # translucent backdrop so it reads cleanly through the dashed lines
-    ax.text(0.50, 0.625,
+    ax.text(0.50, 0.665,
             "Only model updates flow over the dashed links — raw records never leave a fusion federated client.",
             ha="center", va="center", fontsize=9, color="#444", style="italic",
             zorder=7,
@@ -87,14 +82,14 @@ def make_overview(out: Path) -> None:
 
     # Geographic backdrop band
     backdrop = mpatches.Polygon(
-        [(0.04, 0.06), (0.96, 0.06), (0.98, 0.56), (0.02, 0.56)],
+        [(0.04, 0.04), (0.96, 0.04), (0.98, 0.60), (0.02, 0.60)],
         closed=True, facecolor="#eef4fa", edgecolor="#aec3da",
         linewidth=1.5, zorder=1,
     )
     ax.add_patch(backdrop)
 
     # Backdrop label — layered above lines with translucent box
-    ax.text(0.50, 0.520, "U.S. fusion-center geography (FIPS-derived partition)",
+    ax.text(0.50, 0.555, "U.S. fusion-center geography (FIPS-derived partition)",
             ha="center", va="center", fontsize=9, style="italic",
             color="#5a738f", zorder=7,
             bbox=dict(facecolor="white", alpha=0.85, edgecolor="none", pad=2))
@@ -286,11 +281,6 @@ def make_architecture(out: Path) -> None:
     ax.text(0.50, 0.13, "global model θᵗ broadcast  ↔  client updates {θⱼ}",
             ha="center", va="center", fontsize=8.5,
             color=LAYER3_TEXT, style="italic", zorder=7)
-
-    # Title
-    ax.text(0.50, 0.985,
-            "ATLAS: Three-Layer Coordination Framework",
-            ha="center", va="center", fontsize=13, fontweight="bold")
 
     ax.set_xlim(0, 1)
     ax.set_ylim(0, 1)

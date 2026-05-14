@@ -59,10 +59,70 @@ import numpy as np
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
-from Analysis.CommunitiesCrime import (
-    plot_centralized_vs_federated,
-    plot_per_client_distribution,
+from Analysis.CommunitiesCrime.log_parser import (
+    collect_server_logs,
+    parse_partition_stats,
 )
+from Analysis.CommunitiesCrime.plot_style import (
+    apply_style,
+    derive_savefig_kwargs,
+)
+
+_CLASS_LABELS = {"0": "violent", "1": "property", "2": "other"}
+
+
+def _plot_per_client_distribution(run_dir, out):
+    """Inline plotting (no title) for the per-client distribution figure."""
+    stats = parse_partition_stats(Path(run_dir) / "partition_stats.json")
+    clients = stats.get("clients", {})
+    client_ids = sorted(clients.keys(), key=int)
+    classes = sorted({c for cid in client_ids
+                      for c in clients[cid]["train"].get("class_distribution", {})})
+
+    counts = np.zeros((len(classes), len(client_ids)), dtype=int)
+    for j, cid in enumerate(client_ids):
+        dist = clients[cid]["train"].get("class_distribution", {})
+        for i, c in enumerate(classes):
+            counts[i, j] = int(dist.get(c, 0))
+
+    with apply_style("paper"):
+        fig, ax = plt.subplots(figsize=(max(8, 1.5 * len(client_ids)), 5))
+        bottom = np.zeros(len(client_ids), dtype=int)
+        x = np.arange(len(client_ids))
+        for i, c in enumerate(classes):
+            ax.bar(x, counts[i], bottom=bottom,
+                   label=_CLASS_LABELS.get(c, f"class {c}"))
+            bottom = bottom + counts[i]
+        ax.set_xlabel("Client ID")
+        ax.set_ylabel("Train samples")
+        ax.set_xticks(x, client_ids)
+        ax.legend(title="threat_class")
+        fig.tight_layout()
+        fig.savefig(out, **derive_savefig_kwargs(out))
+        plt.close(fig)
+
+
+def _plot_centralized_vs_federated(runs, out, baseline=None,
+                                   metric="threat_macro_f1"):
+    """Inline plotting (no title) for the headline / proximal figures."""
+    df = collect_server_logs(list(runs.values()), list(runs.keys()))
+    with apply_style("paper"):
+        fig, ax = plt.subplots(figsize=(8, 5))
+        for label, sub in df.groupby("label"):
+            if metric not in sub.columns:
+                continue
+            ax.plot(sub["round"], sub[metric], label=label,
+                    marker="o", markersize=3)
+        if baseline is not None:
+            ax.axhline(baseline, linestyle="--", color="black", alpha=0.6,
+                       label=f"Centralized ({baseline:.3f})")
+        ax.set_xlabel("Round")
+        ax.set_ylabel(metric)
+        ax.legend()
+        ax.grid(True, alpha=0.3)
+        fig.tight_layout()
+        fig.savefig(out, **derive_savefig_kwargs(out))
+        plt.close(fig)
 
 # ---------------------------------------------------------------------------
 # Run-directory search tables
@@ -139,7 +199,7 @@ def make_per_client_distribution(out: Path, mode: str) -> str:
     geo = None if mode == "synthetic" else first_valid(GEO_RUN_CANDIDATES, "partition_stats.json")
 
     if geo is not None:
-        plot_per_client_distribution.plot(geo, output=out, style="paper")
+        _plot_per_client_distribution(geo, out)
         return f"real from {geo.relative_to(REPO_ROOT)}"
 
     if mode == "real":
@@ -161,7 +221,6 @@ def make_per_client_distribution(out: Path, mode: str) -> str:
         bottom += base[:, i]
     ax.set_xlabel("Client ID")
     ax.set_ylabel("Train samples")
-    ax.set_title("Per-client class distribution (strategy=geographic, N=5)")
     ax.set_xticks(x, [str(i) for i in range(n_clients)])
     ax.legend(title="threat_class")
     ax.spines["top"].set_visible(False)
@@ -206,17 +265,15 @@ def make_headline_convergence(out: Path, mode: str, baseline: float) -> str:
             f"{set(['FedAvg-IID', 'FedAvg-Geographic', 'FedProx-Geographic']) - set(available)}"
         )
 
-    # If we have all three runs, use the official plot module
+    # If we have all three runs, use the inline title-free plot
     if len(available) == 3:
-        plot_centralized_vs_federated.plot(
-            available, output=out,
-            centralized_baseline=baseline, style="paper",
+        _plot_centralized_vs_federated(
+            available, out, baseline=baseline,
         )
         return "real from " + "; ".join(sources)
 
     # Otherwise build a custom plot: real curves where we have them,
     # synthetic curves for the rest.
-    from Analysis.CommunitiesCrime.log_parser import collect_server_logs
 
     fig, ax = plt.subplots(figsize=(8, 5), dpi=300)
     rounds = 50
@@ -249,7 +306,6 @@ def make_headline_convergence(out: Path, mode: str, baseline: float) -> str:
                label=f"Centralized ({baseline:.3f})")
     ax.set_xlabel("Round")
     ax.set_ylabel("threat_macro_f1")
-    ax.set_title("Headline convergence — centralized vs federated")
     ax.legend(loc="lower right", fontsize=9)
     ax.grid(True, alpha=0.3)
     ax.spines["top"].set_visible(False)
@@ -271,9 +327,9 @@ def make_proximal_evolution(out: Path, mode: str) -> str:
     prox = None if mode == "synthetic" else first_valid(PROX_RUN_CANDIDATES, "server_evaluation.log")
 
     if prox is not None:
-        plot_centralized_vs_federated.plot(
-            {"FedProx-Geographic": prox},
-            output=out, metric="proximal_contribution", style="paper",
+        _plot_centralized_vs_federated(
+            {"FedProx-Geographic": prox}, out,
+            metric="proximal_contribution",
         )
         return f"real from {prox.relative_to(REPO_ROOT)}"
 
@@ -292,7 +348,6 @@ def make_proximal_evolution(out: Path, mode: str) -> str:
     ax.plot(t, pi, marker="o", markersize=3, label="FedProx-Geographic")
     ax.set_xlabel("Round")
     ax.set_ylabel(r"proximal_contribution  $\Pi = (\mu/2)\sum_j \|\theta_j - \theta^t\|^2$")
-    ax.set_title(r"Proximal-term decay under FedProx ($\mu = 0.01$)")
     ax.legend(loc="upper right")
     ax.grid(True, alpha=0.3)
     ax.spines["top"].set_visible(False)
